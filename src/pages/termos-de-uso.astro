@@ -1,0 +1,68 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { doctor } from "../data/doctor";
+---
+
+<BaseLayout
+  title="Termos de uso | Pneumologista pediátrica em Mossoró"
+  description={`Leia os termos de uso do site da ${doctor.professionalName}, com orientações sobre conteúdo educativo, contato e limitações de uso.`}
+  canonical={Astro.url.href}
+>
+  <section class="mx-auto max-w-3xl px-4 py-16">
+    <h1 class="text-3xl font-bold text-slate-900">Termos de uso</h1>
+    <p class="mt-4 text-slate-700">
+      Ao navegar neste site, você concorda com as condições abaixo sobre uso do conteúdo e dos
+      canais de contato disponibilizados.
+    </p>
+
+    <div class="mt-10 space-y-8 text-slate-700">
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Finalidade do conteúdo</h2>
+        <p class="mt-2">
+          Os textos publicados neste site têm finalidade informativa e educativa. Eles não
+          substituem consulta médica, avaliação presencial, diagnóstico ou tratamento individual.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Uso dos canais de contato</h2>
+        <p class="mt-2">
+          O formulário e o WhatsApp devem ser usados para contato inicial e agendamento. Esses
+          canais não foram criados para atendimento de urgência ou emergência.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Responsabilidade do usuário</h2>
+        <p class="mt-2">
+          O usuário é responsável pelas informações que decidir enviar e pelo uso adequado dos
+          conteúdos do site. Em caso de dúvidas sobre sintomas, exames ou condutas, procure
+          avaliação médica.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Atualizações</h2>
+        <p class="mt-2">
+          Estes termos podem ser atualizados a qualquer momento para refletir ajustes no site ou na
+          forma de atendimento.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Contato</h2>
+        <p class="mt-2">
+          Se precisar falar com a equipe da {doctor.professionalName}, use o e-mail
+          <a href={`mailto:${doctor.email}`} class="font-medium text-sky-700 underline hover:text-sky-900">
+            {doctor.email}
+          </a>
+          ou o telefone
+          <a href={`tel:+${doctor.phone}`} class="font-medium text-sky-700 underline hover:text-sky-900">
+            {doctor.displayPhone}
+          </a>
+          .
+        </p>
+      </section>
+    </div>
+  </section>
+</BaseLayout>

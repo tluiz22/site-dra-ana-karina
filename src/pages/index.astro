@@ -1,0 +1,170 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import SpecialtyCard from "../components/SpecialtyCard.astro";
+import WhatsAppButton from "../components/WhatsAppButton.astro";
+import { doctor } from "../data/doctor";
+import { faq } from "../data/faq";
+import { specialties } from "../data/specialties";
+
+const whenToSeekItems = [
+  "Tosse persistente",
+  "Cansaço ou falta de ar",
+  "Suspeita de asma infantil",
+  "Bronquiolite",
+  "Alergias respiratórias",
+  "Pneumonia ou sinais de alarme",
+  "Gripes ou infecções respiratórias frequentes",
+  "Dúvidas sobre uso correto de medicações para asma",
+];
+
+const differentials = [
+  "Ética",
+  "Respeito",
+  "Atenção individualizada",
+  "Atualização constante",
+  "Condutas baseadas nas principais diretrizes",
+  "Foco na prevenção",
+  "Escuta ativa e humanizada",
+  "Consulta minuciosa e detalhada",
+];
+---
+
+<BaseLayout
+  title="Dra. Ana Karina Fernandes | Pneumologista pediátrica em Mossoró"
+  description="Atendimento com Dra. Ana Karina Fernandes, pediatra e pneumologista pediátrica em Mossoró/RN. Cuidado especializado para asma infantil, tosse persistente, alergias respiratórias, bronquiolite e saúde respiratória infantil."
+  canonical={Astro.url.href}
+>
+  <section class="mx-auto max-w-5xl px-4 py-16 md:py-24">
+    <div class="grid items-center gap-10 md:grid-cols-2">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-wide text-sky-700">
+          {doctor.professionalName} · {doctor.title}
+        </p>
+        <h1 class="mt-3 text-3xl font-bold text-slate-900 md:text-4xl">
+          Cuidado especializado para a saúde respiratória do seu filho
+        </h1>
+        <p class="mt-4 text-base text-slate-600">
+          Atendimento em Pediatria e Pneumologia Pediátrica para recém-nascidos, bebês,
+          crianças e adolescentes em Mossoró/RN, com consulta minuciosa, escuta ativa e
+          condutas baseadas nas principais diretrizes.
+        </p>
+        <div class="mt-6 flex flex-col gap-3 sm:flex-row">
+          <WhatsAppButton
+            label="Agendar consulta pelo WhatsApp"
+            origin="click_whatsapp_hero"
+          />
+          <a
+            href="#sobre"
+            class="inline-flex items-center justify-center rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:border-slate-400"
+          >
+            Conheça a médica
+          </a>
+        </div>
+      </div>
+
+      <div
+        class="flex aspect-square items-center justify-center rounded-2xl bg-slate-100 text-slate-400"
+        role="img"
+        aria-label="Foto profissional em breve"
+      >
+        <span class="text-sm">Foto profissional em breve</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-slate-50 py-16">
+    <div class="mx-auto max-w-5xl px-4">
+      <h2 class="text-2xl font-bold text-slate-900">
+        Quando procurar uma pneumologista pediátrica?
+      </h2>
+      <ul class="mt-6 grid gap-3 sm:grid-cols-2">
+        {whenToSeekItems.map((item) => (
+          <li class="flex items-start gap-2 text-slate-700">
+            <span class="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-sky-600" aria-hidden="true" />
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="py-16">
+    <div class="mx-auto max-w-5xl px-4">
+      <h2 class="text-2xl font-bold text-slate-900">Doenças e sintomas avaliados</h2>
+      <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {specialties.map((specialty) => (
+          <SpecialtyCard title={specialty.title} description={specialty.description} />
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section id="sobre" class="bg-slate-50 py-16">
+    <div class="mx-auto max-w-3xl px-4">
+      <h2 class="text-2xl font-bold text-slate-900">Sobre a médica</h2>
+      <p class="mt-4 text-slate-600">
+        A Dra. Ana Karina Fernandes é pediatra, pneumopediatra e intensivista pediátrica,
+        com 13 anos de atuação. Possui formação pela Universidade Federal de Campina
+        Grande, residências médicas em Pediatria e Pneumologia Pediátrica pelo Hospital
+        Infantil Albert Sabin - Fortaleza/CE e experiência em ensino médico. Seu
+        atendimento é pautado por ética, respeito, escuta ativa, atualização constante e
+        condutas baseadas nas principais diretrizes.
+      </p>
+    </div>
+  </section>
+
+  <section class="py-16">
+    <div class="mx-auto max-w-5xl px-4">
+      <h2 class="text-2xl font-bold text-slate-900">Diferenciais do atendimento</h2>
+      <ul class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {differentials.map((item) => (
+          <li class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-center text-sm font-medium text-slate-700">
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="py-16">
+    <div class="mx-auto max-w-5xl px-4">
+      <div class="mx-auto max-w-3xl text-center">
+        <h2 class="text-2xl font-bold text-slate-900">Dúvidas frequentes</h2>
+        <p class="mt-2 text-slate-600">
+          Respostas rápidas para as principais dúvidas sobre saúde respiratória infantil.
+        </p>
+      </div>
+
+      <div class="mx-auto mt-8 max-w-3xl space-y-3">
+        {faq.map((item, index) => (
+          <details class="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={index === 0}>
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-left text-base font-semibold text-slate-800">
+              <span>{item.question}</span>
+              <span class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-lg text-slate-700 transition-transform group-open:rotate-45">
+                +
+              </span>
+            </summary>
+            <p class="mt-4 pr-10 text-sm leading-6 text-slate-600">
+              {item.answer}
+            </p>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-slate-900 py-16">
+    <div class="mx-auto max-w-3xl px-4 text-center">
+      <h2 class="text-2xl font-bold text-white">
+        Seu filho apresenta sintomas respiratórios recorrentes?
+      </h2>
+      <p class="mt-2 text-slate-300">
+        Agende uma avaliação com a Dra. Ana Karina Fernandes.
+      </p>
+      <WhatsAppButton
+        label="Falar pelo WhatsApp"
+        origin="click_whatsapp_footer"
+      />
+    </div>
+  </section>
+</BaseLayout>

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+.dist/
+dist/
+.astro/
+.vercel/
+
+# Local env and system files
+.DS_Store
+.env
+.env.*
+
+# Project files not meant for git
+.github/
+docs/
+
+# Optional local editor artifacts
+.vscode/
+
+# VS Code/Copilot local artifacts
+. copilotignore

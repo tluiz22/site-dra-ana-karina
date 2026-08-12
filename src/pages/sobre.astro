@@ -1,0 +1,68 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { doctor } from "../data/doctor";
+
+const approach = [
+  "Ética",
+  "Respeito",
+  "Atenção individualizada",
+  "Atualização constante",
+  "Condutas baseadas nas principais diretrizes",
+  "Foco na prevenção",
+  "Escuta ativa e humanizada",
+  "Consulta minuciosa e detalhada",
+];
+---
+
+<BaseLayout
+  title={`Sobre a ${doctor.professionalName} | Pneumologista pediátrica em Mossoró`}
+  description={`Conheça a formação, trajetória e abordagem de atendimento da ${doctor.professionalName}, pneumologista pediátrica em Mossoró/RN.`}
+  canonical={Astro.url.href}
+>
+  <section class="mx-auto max-w-3xl px-4 py-16">
+    <div class="flex flex-col items-center gap-6 text-center sm:flex-row sm:text-left">
+      <div
+        class="flex aspect-square w-32 flex-none items-center justify-center rounded-2xl bg-slate-100 text-slate-400"
+        role="img"
+        aria-label="Foto profissional em breve"
+      >
+        <span class="text-xs">Foto em breve</span>
+      </div>
+      <div>
+        <h1 class="text-3xl font-bold text-slate-900">Sobre a {doctor.professionalName}</h1>
+        <p class="mt-1 text-slate-600">{doctor.name}</p>
+        <p class="mt-1 text-sm font-medium text-slate-500">
+          {doctor.crm} · {doctor.rqePediatria} · {doctor.rqePneumologia}
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-10 space-y-6 text-slate-700">
+      <p>{doctor.shortBio}</p>
+      <p>
+        Atuação de {doctor.yearsOfExperience} dedicada ao cuidado de {doctor.targetAudience.toLowerCase()}.
+      </p>
+
+    <div class="mt-10">
+      <h2 class="text-xl font-bold text-slate-900">Abordagem de atendimento</h2>
+      <ul class="mt-3 grid gap-3 sm:grid-cols-2">
+        {approach.map((item) => (
+          <li class="rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700">
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+    </div>
+
+    <div class="mt-10">
+      <h2 class="text-xl font-bold text-slate-900">Formação</h2>
+      <ul class="mt-3 space-y-2 text-slate-700">
+        <li>Graduação em Medicina — {doctor.medicalSchool}</li>
+        <li>Residência em Pediatria — {doctor.pediatricsResidency}</li>
+        <li>Residência em Pneumologia Pediátrica — {doctor.pulmonologyResidency}</li>
+        <li>Experiência em ensino médico</li>
+      </ul>
+    </div>
+  </section>
+</BaseLayout>

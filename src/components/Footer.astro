@@ -1,0 +1,55 @@
+---
+import { doctor } from "../data/doctor";
+---
+
+<footer class="border-t border-slate-200 bg-slate-50">
+  <div class="mx-auto max-w-5xl px-4 py-8 text-sm text-slate-600">
+    <p class="font-semibold text-slate-900">{doctor.professionalName}</p>
+    <p>{doctor.crm} · {doctor.rqePediatria} · {doctor.rqePneumologia}</p>
+
+    <p class="mt-3">
+      {doctor.clinic}<br />
+      {doctor.address}, {doctor.city}/{doctor.state}
+    </p>
+
+    <ul class="mt-3 space-y-1">
+      <li>
+        WhatsApp:
+        <a href={`tel: +${doctor.phone}`} class="hover:text-slate-900">{doctor.displayPhone}</a>
+      </li>
+      <li>
+        E-mail:
+        <a href={`mailto: ${doctor.email}`} class="hover:text-slate-900">{doctor.email}</a>
+      </li>
+      <li>
+        Instagram: 
+        <a
+          href={`https://instagram.com/${doctor.instagram}`}
+          class="hover:text-slate-900"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          @{doctor.instagram}
+        </a>
+      </li>
+      <li>
+        <a href="/politica-de-privacidade" class="hover:text-slate-900 underline">
+          Política de privacidade
+        </a>
+      </li>
+      <li>
+        <a href="/termos-de-uso" class="hover:text-slate-900 underline">Termos de uso</a>
+      </li>
+    </ul>
+
+    <aside
+      class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900"
+      role="note"
+      aria-label="Aviso de emergência"
+    >
+      <strong>Aviso de emergência:</strong> Este site não realiza atendimento de urgência ou
+      emergência. Em caso de sintomas intensos, falta de ar, piora rápida ou emergência médica,
+      procure atendimento imediato.
+    </aside>
+  </div>
+</footer>

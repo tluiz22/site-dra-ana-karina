@@ -1,0 +1,54 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const allPosts = await getCollection('blog', ({ data }) => !data.draft);
+const posts = allPosts.sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+);
+---
+
+<BaseLayout
+  title="Blog | Pneumologista pediátrica em Mossoró"
+  description="Artigos educativos sobre saúde respiratória infantil escritos pela Dra. Ana Karina, pneumologista pediátrica em Mossoró/RN."
+  canonical={Astro.url.href}
+>
+  <section class="mx-auto max-w-3xl px-4 py-12">
+    <h1 class="mb-8 text-3xl font-bold text-slate-900">Blog</h1>
+
+    {posts.length === 0 ? (
+      <p class="text-slate-600">Nenhum artigo publicado ainda.</p>
+    ) : (
+      <ul class="space-y-10">
+        {posts.map((post) => (
+          <li>
+            <article>
+              <a href={`/blog/${post.id}`} class="group block rounded-lg border border-slate-200 p-6 hover:border-emerald-300 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600">
+                <p class="mb-1 text-xs font-medium uppercase tracking-wide text-emerald-700">
+                  {post.data.category}
+                </p>
+                <h2 class="text-xl font-semibold text-slate-900 group-hover:text-emerald-800">
+                  {post.data.title}
+                </h2>
+                <time
+                  datetime={post.data.pubDate.toISOString()}
+                  class="mt-1 block text-sm text-slate-500"
+                >
+                  {post.data.pubDate.toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </time>
+                <p class="mt-3 text-slate-700">{post.data.description}</p>
+                <span class="mt-4 inline-block text-sm font-medium text-emerald-700 group-hover:underline">
+                  Ler artigo →
+                </span>
+              </a>
+            </article>
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+</BaseLayout>
