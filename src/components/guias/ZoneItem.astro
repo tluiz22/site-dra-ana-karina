@@ -1,0 +1,30 @@
+---
+interface Props {
+  zone: "verde" | "amarela" | "vermelha";
+  title: string;
+}
+
+const { zone, title } = Astro.props;
+
+const styles = {
+  verde: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  amarela: "border-amber-200 bg-amber-50 text-amber-900",
+  vermelha: "border-red-200 bg-red-50 text-red-900",
+};
+
+const dot = {
+  verde: "bg-emerald-600",
+  amarela: "bg-amber-600",
+  vermelha: "bg-red-600",
+};
+---
+
+<div class={`rounded-lg border px-5 py-4 ${styles[zone]}`}>
+  <p class="flex items-center gap-2 font-semibold">
+    <span class={`h-2.5 w-2.5 flex-none rounded-full ${dot[zone]}`} aria-hidden="true" />
+    {title}
+  </p>
+  <div class="mt-1 text-sm">
+    <slot />
+  </div>
+</div>
