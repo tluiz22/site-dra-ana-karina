@@ -93,7 +93,11 @@ const differentials = [
       <h2 class="text-2xl font-bold text-slate-900">Doenças e sintomas avaliados</h2>
       <div class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {specialties.map((specialty) => (
-          <SpecialtyCard title={specialty.title} description={specialty.description} />
+          <SpecialtyCard
+            title={specialty.title}
+            description={specialty.description}
+            guideSlug={specialty.guideSlug}
+          />
         ))}
       </div>
     </div>

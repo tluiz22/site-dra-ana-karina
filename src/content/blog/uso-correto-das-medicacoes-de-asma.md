@@ -27,3 +27,5 @@ No tratamento da asma, o resultado depende não apenas da medicação prescrita,
 - Não ajustar doses por conta própria.
 
 Com orientação adequada, a maioria das crianças com asma pode manter rotina ativa e com poucas crises.
+
+Para o passo a passo completo do uso do inalador com espaçador e do Turbuhaler, veja o [Guia Prático: Cuidando da Asma do seu Filho](/guias/asma-infantil).

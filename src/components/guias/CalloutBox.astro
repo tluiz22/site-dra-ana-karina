@@ -1,0 +1,21 @@
+---
+interface Props {
+  variant?: "info" | "atencao" | "emergencia";
+  title?: string;
+}
+
+const { variant = "info", title } = Astro.props;
+
+const styles = {
+  info: "border-sky-200 bg-sky-50 text-sky-900",
+  atencao: "border-amber-200 bg-amber-50 text-amber-900",
+  emergencia: "border-red-300 bg-red-50 text-red-900",
+};
+---
+
+<div class={`rounded-lg border px-5 py-4 text-sm ${styles[variant]}`} role="note">
+  {title && <strong class="block">{title}</strong>}
+  <div class="mt-1">
+    <slot />
+  </div>
+</div>

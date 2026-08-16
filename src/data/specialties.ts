@@ -4,6 +4,7 @@ export const specialties = [
     description:
       "Avaliação e acompanhamento de crianças com sintomas como cansaço, chiado no peito, tosse e falta de ar.",
     slug: "asma-infantil",
+    guideSlug: "asma-infantil",
   },
   {
     title: "Alergias respiratórias",
