@@ -1,0 +1,24 @@
+---
+import { doctor } from "../data/doctor";
+
+const physician = {
+  "@context": "https://schema.org",
+  "@type": "Physician",
+  name: doctor.professionalName,
+  image: new URL("/foto-dra.png", Astro.url).href,
+  url: new URL("/", Astro.url).href,
+  telephone: `+${doctor.phone}`,
+  email: doctor.email,
+  medicalSpecialty: ["Pediatrics", "Pulmonology"],
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: doctor.address,
+    addressLocality: doctor.city,
+    addressRegion: doctor.state,
+    addressCountry: "BR",
+  },
+  sameAs: [`https://instagram.com/${doctor.instagram}`],
+};
+---
+
+<script is:inline type="application/ld+json" set:html={JSON.stringify(physician)} />

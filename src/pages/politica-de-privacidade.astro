@@ -5,7 +5,7 @@ import { doctor } from "../data/doctor";
 
 <BaseLayout
   title="Política de privacidade | Pneumologista pediátrica em Mossoró"
-  description={`Saiba como os dados enviados para ${doctor.professionalName} pelo formulário de contato ou WhatsApp são usados para contato e agendamento.`}
+  description={`Saiba como os dados enviados para ${doctor.professionalName} pelo WhatsApp são usados para contato e agendamento.`}
   canonical={Astro.url.href}
 >
   <section class="mx-auto max-w-3xl px-4 py-16">
@@ -19,9 +19,8 @@ import { doctor } from "../data/doctor";
       <section>
         <h2 class="text-xl font-bold text-slate-900">Quais dados podem ser enviados</h2>
         <p class="mt-2">
-          Quando você entra em contato pelo formulário, podem ser enviados nome, telefone e a
-          mensagem informada por você. Se o contato for feito pelo WhatsApp, os dados compartilhados
-          na conversa também podem ser usados para continuar o atendimento.
+          Quando você entra em contato pelo WhatsApp, os dados compartilhados na conversa (como
+          nome, telefone e a mensagem enviada) podem ser usados para continuar o atendimento.
         </p>
       </section>
 
@@ -29,8 +28,18 @@ import { doctor } from "../data/doctor";
         <h2 class="text-xl font-bold text-slate-900">Como esses dados são usados</h2>
         <p class="mt-2">
           Os dados enviados são usados apenas para responder seu contato, organizar informações
-          iniciais e apoiar o agendamento de consultas. O formulário e o WhatsApp não substituem
-          consulta médica, avaliação presencial nem atendimento de urgência.
+          iniciais e apoiar o agendamento de consultas. O WhatsApp não substitui consulta médica,
+          avaliação presencial nem atendimento de urgência.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Cookies e estatísticas de uso</h2>
+        <p class="mt-2">
+          Este site utiliza o Google Analytics para entender, de forma agregada e anônima, como as
+          páginas são visitadas, com o objetivo de melhorar o conteúdo oferecido. Essa ferramenta
+          pode usar cookies para essa finalidade. Nenhum dado enviado ao Google Analytics é usado
+          para identificar pessoalmente um visitante.
         </p>
       </section>
 

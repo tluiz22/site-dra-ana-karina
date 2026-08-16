@@ -18,20 +18,24 @@ const {
 } = Astro.props;
 
 const resolvedCanonical = canonical ?? Astro.url.href;
+const resolvedOgImage = ogImage ?? new URL("/foto-dra.png", Astro.url).href;
 ---
 
 <title>{title}</title>
 <meta name="description" content={description} />
 <link rel="canonical" href={resolvedCanonical} />
+<link rel="icon" type="image/png" href="/favicon.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="alternate" type="application/rss+xml" title="Blog RSS" href="/rss.xml" />
 {noindex && <meta name="robots" content="noindex, nofollow" />}
 
 <meta property="og:type" content={type} />
 <meta property="og:title" content={title} />
 <meta property="og:description" content={description} />
 <meta property="og:url" content={resolvedCanonical} />
-{ogImage && <meta property="og:image" content={ogImage} />}
+<meta property="og:image" content={resolvedOgImage} />
 
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content={title} />
 <meta name="twitter:description" content={description} />
-{ogImage && <meta name="twitter:image" content={ogImage} />}
+<meta name="twitter:image" content={resolvedOgImage} />

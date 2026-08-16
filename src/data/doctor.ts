@@ -23,7 +23,7 @@ export const doctor = {
   instagram: "dra.anakarina.pneumo",
   whatsappMessage:
     "Olá, gostaria de agendar uma consulta com a Dra. Ana Karina Fernandes. Encontrei o contato pelo site.",
-  hasProfessionalPhoto: false,
+  hasProfessionalPhoto: true,
   hasVisualIdentity: true,
   hasClinicPhotos: false,
 };
