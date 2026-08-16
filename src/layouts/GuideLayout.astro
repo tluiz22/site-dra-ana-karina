@@ -1,0 +1,68 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import WhatsAppButton from "../components/WhatsAppButton.astro";
+import { doctor } from "../data/doctor";
+
+interface Props {
+  title: string;
+  subtitle: string;
+  description: string;
+  pdfFile: string;
+  canonical: string;
+}
+
+const { title, subtitle, description, pdfFile, canonical } = Astro.props;
+---
+
+<BaseLayout title={`${title} | Guia para pais`} description={description} canonical={canonical}>
+  <article class="mx-auto max-w-3xl px-4 py-12">
+    <header class="mb-8">
+      <p class="mb-2 text-xs font-medium uppercase tracking-wide text-sky-700">
+        Guia para pais e responsáveis
+      </p>
+      <h1 class="text-3xl font-bold leading-tight text-slate-900">{title}</h1>
+      <p class="mt-2 text-lg text-slate-600">{subtitle}</p>
+      <p class="mt-4 text-sm text-slate-500">
+        {doctor.professionalName} · {doctor.crm} · {doctor.rqePneumologia}
+      </p>
+    </header>
+
+    <div class="mb-10 flex flex-col gap-3 sm:flex-row">
+      <a
+        href={pdfFile}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center justify-center rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:border-slate-400"
+      >
+        Baixar guia em PDF
+      </a>
+    </div>
+
+    <div class="prose prose-slate max-w-none space-y-8">
+      <slot />
+    </div>
+
+    <aside
+      class="mt-12 rounded-lg border border-amber-200 bg-amber-50 px-6 py-4 text-sm text-amber-900"
+      role="note"
+      aria-label="Aviso médico"
+    >
+      <strong>Aviso:</strong> Este material tem finalidade educativa e não substitui consulta
+      médica. Traga este guia na próxima consulta para conversar com calma sobre o cuidado do seu
+      filho. Em caso de urgência ou emergência, procure atendimento médico imediatamente.
+    </aside>
+
+    <div class="mt-10 flex justify-center">
+      <WhatsAppButton label="Agendar consulta via WhatsApp" origin="click_whatsapp_guia_footer" />
+    </div>
+
+    <nav class="mt-10 border-t border-slate-200 pt-6">
+      <a
+        href="/guias"
+        class="text-sm font-medium text-sky-700 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600"
+      >
+        ← Voltar aos Guias
+      </a>
+    </nav>
+  </article>
+</BaseLayout>

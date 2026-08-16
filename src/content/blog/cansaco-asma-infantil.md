@@ -27,3 +27,5 @@ Observe se a criança apresenta:
 ## Próximos passos
 
 Quando esses sintomas aparecem com frequência, a revisão do plano de tratamento é essencial. O objetivo é permitir que a criança tenha rotina ativa, segura e com boa qualidade de vida.
+
+Para entender melhor os sinais, gatilhos e como reconhecer uma crise, veja o [Guia Prático: Cuidando da Asma do seu Filho](/guias/asma-infantil).

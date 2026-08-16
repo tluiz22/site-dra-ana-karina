@@ -1,0 +1,49 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const allGuides = await getCollection('guias', ({ data }) => !data.draft);
+const guides = allGuides.sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+);
+---
+
+<BaseLayout
+  title="Guias para pais | Pneumologista pediátrica em Mossoró"
+  description="Guias práticos e gratuitos da Dra. Ana Karina para pais e responsáveis cuidarem da saúde respiratória dos filhos em casa."
+  canonical={Astro.url.href}
+>
+  <section class="mx-auto max-w-3xl px-4 py-12">
+    <h1 class="mb-2 text-3xl font-bold text-slate-900">Guias para pais</h1>
+    <p class="mb-8 text-slate-600">
+      Materiais educativos práticos, escritos pela Dra. Ana Karina, para apoiar o dia a dia do
+      cuidado respiratório em casa.
+    </p>
+
+    {guides.length === 0 ? (
+      <p class="text-slate-600">Nenhum guia publicado ainda.</p>
+    ) : (
+      <ul class="space-y-10">
+        {guides.map((guide) => (
+          <li>
+            <article>
+              <a href={`/guias/${guide.id}`} class="group block rounded-lg border border-slate-200 p-6 hover:border-sky-300 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">
+                <p class="mb-1 text-xs font-medium uppercase tracking-wide text-sky-700">
+                  {guide.data.condition}
+                </p>
+                <h2 class="text-xl font-semibold text-slate-900 group-hover:text-sky-800">
+                  {guide.data.title}
+                </h2>
+                <p class="mt-1 text-slate-500">{guide.data.subtitle}</p>
+                <p class="mt-3 text-slate-700">{guide.data.description}</p>
+                <span class="mt-4 inline-block text-sm font-medium text-sky-700 group-hover:underline">
+                  Ler guia →
+                </span>
+              </a>
+            </article>
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+</BaseLayout>
