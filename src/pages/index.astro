@@ -1,10 +1,25 @@
 ---
+import { Image } from "astro:assets";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import SpecialtyCard from "../components/SpecialtyCard.astro";
 import WhatsAppButton from "../components/WhatsAppButton.astro";
+import fotoDra from "../assets/foto-dra.png";
 import { doctor } from "../data/doctor";
 import { faq } from "../data/faq";
 import { specialties } from "../data/specialties";
+
+const faqStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faq.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.answer,
+    },
+  })),
+};
 
 const whenToSeekItems = [
   "Tosse persistente",
@@ -63,10 +78,12 @@ const differentials = [
       </div>
 
       <div class="overflow-hidden rounded-2xl bg-slate-100 shadow-sm ring-1 ring-slate-200">
-        <img
-          src="/foto-dra.png"
+        <Image
+          src={fotoDra}
           alt="Dra. Ana Karina Fernandes"
           class="h-full w-full object-cover"
+          widths={[400, 800, 1200]}
+          sizes="(min-width: 768px) 50vw, 100vw"
         />
       </div>
     </div>
@@ -171,4 +188,6 @@ const differentials = [
       />
     </div>
   </section>
+
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(faqStructuredData)} />
 </BaseLayout>

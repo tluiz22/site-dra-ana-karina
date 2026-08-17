@@ -13,7 +13,7 @@ dist/
 .env.*
 
 # Project files not meant for git
-.github/
+.github/skills/
 docs/
 
 # Optional local editor artifacts
