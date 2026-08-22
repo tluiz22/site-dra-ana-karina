@@ -11,6 +11,7 @@ dist/
 .DS_Store
 .env
 .env.*
+!.env.example
 
 # Project files not meant for git
 .github/skills/

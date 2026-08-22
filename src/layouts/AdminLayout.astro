@@ -1,0 +1,65 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+
+const navItems = [
+  { label: "Dashboard", href: "/admin/dashboard" },
+  { label: "Agenda", href: "/admin/agenda" },
+  { label: "Pacientes", href: "/admin/pacientes" },
+  { label: "Consultas", href: "/admin/consultas" },
+  { label: "Configurações", href: "/admin/configuracoes" },
+  { label: "Relatórios", href: "/admin/relatorios" },
+];
+
+const currentPath = Astro.url.pathname;
+---
+
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} | Painel do consultório</title>
+    <meta name="robots" content="noindex, nofollow" />
+  </head>
+  <body class="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+    <header class="border-b border-slate-200 bg-white">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+        <span class="text-sm font-semibold uppercase tracking-wide text-sky-700">
+          Painel do consultório
+        </span>
+        <nav class="flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium">
+          {
+            navItems.map((item) => (
+              <a
+                href={item.href}
+                class={
+                  currentPath.startsWith(item.href)
+                    ? "text-sky-700"
+                    : "text-slate-600 hover:text-sky-700"
+                }
+              >
+                {item.label}
+              </a>
+            ))
+          }
+        </nav>
+        <form method="POST" action="/api/admin/auth/logout">
+          <button
+            type="submit"
+            class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+          >
+            Sair
+          </button>
+        </form>
+      </div>
+    </header>
+    <main class="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+      <slot />
+    </main>
+  </body>
+</html>
