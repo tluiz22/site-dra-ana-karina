@@ -38,3 +38,91 @@ export async function queryFreeBusy(timeMin: Date, timeMax: Date): Promise<BusyI
 
   return response.data.calendars[calendarId]?.busy ?? [];
 }
+
+export interface CalendarEvent {
+  id: string;
+  status: string;
+  summary?: string;
+  description?: string;
+  start: { dateTime?: string };
+  end: { dateTime?: string };
+  extendedProperties?: { private?: { appointment_id?: string } };
+}
+
+export async function listEvents(timeMin: Date, timeMax: Date): Promise<CalendarEvent[]> {
+  const client = getAuthClient();
+
+  const response = await client.request<{ items: CalendarEvent[] }>({
+    url: eventsUrl(),
+    method: "GET",
+    params: {
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+    },
+  });
+
+  return response.data.items ?? [];
+}
+
+function eventsUrl(path = ""): string {
+  const calendarId = import.meta.env.GOOGLE_CALENDAR_ID;
+  return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events${path}`;
+}
+
+export async function createEvent({
+  summary,
+  description,
+  start,
+  end,
+  appointmentId,
+}: {
+  summary: string;
+  description: string;
+  start: string;
+  end: string;
+  appointmentId: string;
+}): Promise<{ id: string }> {
+  const client = getAuthClient();
+
+  const response = await client.request<{ id: string }>({
+    url: eventsUrl(),
+    method: "POST",
+    data: {
+      summary,
+      description,
+      start: { dateTime: start, timeZone: "America/Fortaleza" },
+      end: { dateTime: end, timeZone: "America/Fortaleza" },
+      extendedProperties: { private: { appointment_id: appointmentId } },
+    },
+  });
+
+  return { id: response.data.id };
+}
+
+export async function cancelEvent(eventId: string): Promise<void> {
+  const client = getAuthClient();
+
+  await client.request({
+    url: eventsUrl(`/${encodeURIComponent(eventId)}`),
+    method: "PATCH",
+    data: { status: "cancelled" },
+  });
+}
+
+export async function rescheduleEvent(
+  eventId: string,
+  { start, end }: { start: string; end: string }
+): Promise<void> {
+  const client = getAuthClient();
+
+  await client.request({
+    url: eventsUrl(`/${encodeURIComponent(eventId)}`),
+    method: "PATCH",
+    data: {
+      start: { dateTime: start, timeZone: "America/Fortaleza" },
+      end: { dateTime: end, timeZone: "America/Fortaleza" },
+    },
+  });
+}

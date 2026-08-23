@@ -1,8 +1,142 @@
 ---
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import { createClient } from "../../lib/supabase/server";
+import { listEvents } from "../../lib/google/calendar";
+
+const supabase = createClient(Astro.request, Astro.cookies);
+
+function todayFortaleza(): string {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+const dateParam = Astro.url.searchParams.get("date");
+const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayFortaleza();
+
+const dayStart = new Date(`${date}T00:00:00-03:00`);
+const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
+
+const events = await listEvents(dayStart, dayEnd);
+
+const appointmentIds = events
+  .map((event) => event.extendedProperties?.private?.appointment_id)
+  .filter((id): id is string => Boolean(id));
+
+const { data: appointments } = appointmentIds.length
+  ? await supabase
+      .from("appointments")
+      .select(
+        "id, appointment_type, patients ( full_name, guardians ( full_name, phone ) ), clinic_locations ( name, type )"
+      )
+      .in("id", appointmentIds)
+  : { data: [] as any[] };
+
+const appointmentsById = new Map((appointments ?? []).map((appointment) => [appointment.id, appointment]));
+
+const appointmentTypeLabels: Record<string, string> = {
+  first_visit: "Primeira consulta",
+  return_visit: "Retorno",
+};
+
+function formatTime(dateTime: string | undefined): string {
+  if (!dateTime) return "—";
+  const d = new Date(dateTime);
+  return new Date(d.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(11, 16);
+}
+
+const sortedEvents = [...events].sort(
+  (a, b) => new Date(a.start.dateTime ?? 0).getTime() - new Date(b.start.dateTime ?? 0).getTime()
+);
 ---
 
 <AdminLayout title="Agenda">
-  <h1 class="text-2xl font-bold text-slate-900">Agenda</h1>
-  <p class="mt-2 text-slate-600">Em construção.</p>
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-slate-900">Agenda</h1>
+    <a
+      href={`/admin/agenda/marcar?date=${date}`}
+      class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+    >
+      Marcar consulta
+    </a>
+  </div>
+
+  <div class="mt-3 flex flex-wrap items-center gap-3">
+    <form method="GET" action="/admin/agenda" class="flex items-center gap-2">
+      <a href={`/admin/agenda?date=${addDays(date, -1)}`} class="text-sky-700 hover:underline">
+        &larr; Dia anterior
+      </a>
+      <input
+        type="date"
+        name="date"
+        value={date}
+        onchange="this.form.submit()"
+        class="rounded-md border border-slate-300 px-3 py-2 text-sm"
+      />
+      <a href={`/admin/agenda?date=${addDays(date, 1)}`} class="text-sky-700 hover:underline">
+        Próximo dia &rarr;
+      </a>
+      {
+        date !== todayFortaleza() && (
+          <a href="/admin/agenda" class="text-sm text-slate-500 hover:underline">
+            Hoje
+          </a>
+        )
+      }
+    </form>
+  </div>
+
+  <div class="mt-6 flex flex-col gap-3">
+    {
+      sortedEvents.length ? (
+        sortedEvents.map((event) => {
+          const appointmentId = event.extendedProperties?.private?.appointment_id;
+          const appointment = appointmentId ? appointmentsById.get(appointmentId) : undefined;
+          const isCancelled = event.status === "cancelled";
+          const patient = (appointment?.patients ?? null) as any;
+          const guardian = patient?.guardians ?? null;
+          const location = (appointment?.clinic_locations ?? null) as any;
+
+          return (
+            <div
+              class={`rounded-md border p-4 ${isCancelled ? "border-slate-200 bg-slate-50 opacity-60" : "border-slate-200 bg-white"}`}
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="font-medium text-slate-900">
+                  {formatTime(event.start.dateTime)} – {formatTime(event.end.dateTime)}
+                </span>
+                {isCancelled && (
+                  <span class="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+                    Cancelado
+                  </span>
+                )}
+              </div>
+              {appointment ? (
+                <div class="mt-1 text-sm text-slate-700">
+                  <p class="font-medium">{patient?.full_name}</p>
+                  <p class="text-slate-500">
+                    Resp.: {guardian?.full_name} · {guardian?.phone}
+                  </p>
+                  <p class="text-slate-500">
+                    {appointmentTypeLabels[appointment.appointment_type] ?? appointment.appointment_type} ·{" "}
+                    {location?.type === "clinic" ? "Consultório" : "Domiciliar"}
+                  </p>
+                </div>
+              ) : (
+                <p class="mt-1 text-sm text-slate-500">
+                  {event.summary || "Bloqueio manual"} (sem registro de paciente vinculado)
+                </p>
+              )}
+            </div>
+          );
+        })
+      ) : (
+        <p class="text-slate-500">Nenhum evento nesse dia.</p>
+      )
+    }
+  </div>
 </AdminLayout>

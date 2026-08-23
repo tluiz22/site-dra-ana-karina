@@ -1,15 +1,25 @@
 ---
-import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { createClient } from "../../../lib/supabase/server";
+import AdminLayout from "../../../../layouts/AdminLayout.astro";
+import { createClient } from "../../../../lib/supabase/server";
 
 const PAGE_SIZE = 20;
 
 const supabase = createClient(Astro.request, Astro.cookies);
+const { id } = Astro.params;
+
+const { data: guardian } = await supabase
+  .from("guardians")
+  .select("id, full_name, phone, is_active")
+  .eq("id", id)
+  .maybeSingle();
+
+if (!guardian) {
+  return Astro.redirect("/admin/pacientes?error=not_found");
+}
 
 const errorMessages: Record<string, string> = {
-  invalid_phone: "Telefone inválido — informe DDD + número, ex.: 84981880777.",
   invalid_birthdate: "Data de nascimento inválida.",
-  not_found: "Responsável não encontrado.",
+  not_found: "Criança não encontrada.",
   "1": "Não foi possível salvar. Confira os dados e tente novamente.",
 };
 const errorParam = Astro.url.searchParams.get("error");
@@ -20,34 +30,36 @@ const page = Math.max(1, Number(Astro.url.searchParams.get("page")) || 1);
 const from = (page - 1) * PAGE_SIZE;
 const to = from + PAGE_SIZE - 1;
 
-let guardiansQuery = supabase
-  .from("guardians")
-  .select("id, full_name, phone, patients(count)", { count: "exact" })
+let patientsQuery = supabase
+  .from("patients")
+  .select("id, full_name, birthdate, notes", { count: "exact" })
+  .eq("guardian_id", id)
   .eq("is_active", true)
   .order("full_name")
   .range(from, to);
 
 if (q) {
-  guardiansQuery = guardiansQuery.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
+  patientsQuery = patientsQuery.ilike("full_name", `%${q}%`);
 }
 
-const { data: guardians, count } = await guardiansQuery;
+const { data: patients, count } = await patientsQuery;
 const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 
 function pageUrl(targetPage: number): string {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   params.set("page", String(targetPage));
-  return `/admin/pacientes?${params.toString()}`;
+  return `/admin/pacientes/${id}?${params.toString()}`;
+}
+
+function formatBirthdate(birthdate: string): string {
+  const [year, month, day] = birthdate.split("-");
+  return `${day}/${month}/${year}`;
 }
 ---
 
-<AdminLayout title="Pacientes">
-  <h1 class="text-2xl font-bold text-slate-900">Pacientes</h1>
-  <p class="mt-2 text-slate-600">
-    Responsáveis e crianças cadastradas. Um responsável pode ter mais de uma criança sob o mesmo
-    telefone (ex.: prefeitura conveniada agendando por várias crianças).
-  </p>
+<AdminLayout title={guardian.full_name}>
+  <a href="/admin/pacientes" class="text-sm text-sky-700 hover:underline">&larr; Pacientes</a>
 
   {
     errorMessage && (
@@ -55,65 +67,75 @@ function pageUrl(targetPage: number): string {
     )
   }
 
-  <section class="mt-6">
-    <h2 class="text-lg font-semibold text-slate-900">Cadastrar</h2>
-    <p class="mt-1 text-sm text-slate-600">
-      Se o telefone já existir, a criança é adicionada ao responsável existente.
-    </p>
+  <div class="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-md border border-slate-200 bg-white p-4">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">
+        {guardian.full_name}
+        {!guardian.is_active && (
+          <span class="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+            Inativo
+          </span>
+        )}
+      </h1>
+      <p class="mt-1 text-slate-600">{guardian.phone}</p>
+    </div>
+    <div class="flex gap-3">
+      <a
+        href={`/admin/pacientes/${guardian.id}/editar`}
+        class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+      >
+        Editar
+      </a>
+      {
+        guardian.is_active ? (
+          <form method="POST" action={`/api/admin/pacientes/${guardian.id}/excluir`}>
+            <button
+              type="submit"
+              class="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+            >
+              Excluir
+            </button>
+          </form>
+        ) : (
+          <form method="POST" action={`/api/admin/pacientes/${guardian.id}/reativar`}>
+            <button
+              type="submit"
+              class="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            >
+              Reativar
+            </button>
+          </form>
+        )
+      }
+    </div>
+  </div>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-semibold text-slate-900">Adicionar criança</h2>
 
     <form
       method="POST"
-      action="/api/admin/pacientes"
+      action={`/api/admin/pacientes/${guardian.id}/criancas`}
       class="mt-4 grid max-w-xl grid-cols-1 gap-3 rounded-md border border-slate-200 bg-white p-4 sm:grid-cols-2"
     >
       <div>
-        <label for="guardian_full_name" class="block text-sm font-medium text-slate-700">
-          Nome do responsável
-        </label>
+        <label for="full_name" class="block text-sm font-medium text-slate-700">Nome</label>
         <input
           type="text"
-          id="guardian_full_name"
-          name="guardian_full_name"
+          id="full_name"
+          name="full_name"
           required
           class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
       </div>
       <div>
-        <label for="guardian_phone" class="block text-sm font-medium text-slate-700">
-          Telefone
-        </label>
-        <input
-          type="tel"
-          id="guardian_phone"
-          name="guardian_phone"
-          placeholder="84981880777"
-          required
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-        <p class="mt-1 text-xs text-slate-500">
-          Sem o +55 informado, ele é adicionado automaticamente.
-        </p>
-      </div>
-      <div>
-        <label for="patient_full_name" class="block text-sm font-medium text-slate-700">
-          Nome da criança
-        </label>
-        <input
-          type="text"
-          id="patient_full_name"
-          name="patient_full_name"
-          required
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label for="patient_birthdate" class="block text-sm font-medium text-slate-700">
+        <label for="birthdate" class="block text-sm font-medium text-slate-700">
           Data de nascimento
         </label>
         <input
           type="date"
-          id="patient_birthdate"
-          name="patient_birthdate"
+          id="birthdate"
+          name="birthdate"
           min="1900-01-01"
           max={new Date().toISOString().slice(0, 10)}
           required
@@ -121,13 +143,13 @@ function pageUrl(targetPage: number): string {
         />
       </div>
       <div class="sm:col-span-2">
-        <label for="patient_notes" class="block text-sm font-medium text-slate-700">
+        <label for="notes" class="block text-sm font-medium text-slate-700">
           Observação (operacional, não clínica)
         </label>
         <input
           type="text"
-          id="patient_notes"
-          name="patient_notes"
+          id="notes"
+          name="notes"
           placeholder="ex.: prefere período da manhã"
           class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
@@ -136,20 +158,20 @@ function pageUrl(targetPage: number): string {
         type="submit"
         class="mt-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 sm:col-span-2 sm:w-fit"
       >
-        Cadastrar
+        Adicionar
       </button>
     </form>
   </section>
 
   <section class="mt-10">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold text-slate-900">Cadastrados</h2>
-      <form method="GET" action="/admin/pacientes" class="flex gap-2">
+      <h2 class="text-lg font-semibold text-slate-900">Crianças cadastradas</h2>
+      <form method="GET" action={`/admin/pacientes/${guardian.id}`} class="flex gap-2">
         <input
           type="search"
           name="q"
           value={q}
-          placeholder="Buscar por nome ou telefone"
+          placeholder="Buscar por nome"
           class="w-64 rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
         <button
@@ -165,32 +187,32 @@ function pageUrl(targetPage: number): string {
       <table class="w-full border-collapse text-left text-sm">
         <thead class="bg-slate-100 text-slate-600">
           <tr>
-            <th class="px-3 py-2 font-medium">Responsável</th>
-            <th class="px-3 py-2 font-medium">Telefone</th>
-            <th class="px-3 py-2 font-medium">Crianças</th>
+            <th class="px-3 py-2 font-medium">Nome</th>
+            <th class="px-3 py-2 font-medium">Nascimento</th>
+            <th class="px-3 py-2 font-medium">Observação</th>
             <th class="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
           {
-            guardians?.length ? (
-              guardians.map((guardian) => (
+            patients?.length ? (
+              patients.map((patient) => (
                 <tr class="border-t border-slate-200">
-                  <td class="px-3 py-2">{guardian.full_name}</td>
-                  <td class="px-3 py-2 text-slate-500">{guardian.phone}</td>
-                  <td class="px-3 py-2">{(guardian.patients as any)?.[0]?.count ?? 0}</td>
+                  <td class="px-3 py-2">{patient.full_name}</td>
+                  <td class="px-3 py-2 text-slate-500">{formatBirthdate(patient.birthdate)}</td>
+                  <td class="px-3 py-2 text-slate-500">{patient.notes ?? "—"}</td>
                   <td class="px-3 py-2 text-right">
                     <div class="flex justify-end gap-3">
-                      <a href={`/admin/pacientes/${guardian.id}`} class="text-sky-700 hover:underline">
-                        Ver
-                      </a>
                       <a
-                        href={`/admin/pacientes/${guardian.id}/editar`}
+                        href={`/admin/pacientes/${guardian.id}/criancas/${patient.id}/editar`}
                         class="text-slate-600 hover:underline"
                       >
                         Editar
                       </a>
-                      <form method="POST" action={`/api/admin/pacientes/${guardian.id}/excluir`}>
+                      <form
+                        method="POST"
+                        action={`/api/admin/pacientes/${guardian.id}/criancas/${patient.id}/excluir`}
+                      >
                         <button type="submit" class="text-red-700 hover:underline">
                           Excluir
                         </button>
@@ -202,7 +224,7 @@ function pageUrl(targetPage: number): string {
             ) : (
               <tr class="border-t border-slate-200">
                 <td class="px-3 py-4 text-slate-500" colspan="4">
-                  {q ? "Nenhum resultado para essa busca." : "Nenhum responsável cadastrado ainda."}
+                  {q ? "Nenhum resultado para essa busca." : "Nenhuma criança cadastrada ainda."}
                 </td>
               </tr>
             )
