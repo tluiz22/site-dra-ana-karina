@@ -60,6 +60,7 @@ export async function listEvents(timeMin: Date, timeMax: Date): Promise<Calendar
       timeMax: timeMax.toISOString(),
       singleEvents: true,
       orderBy: "startTime",
+      showDeleted: true,
     },
   });
 

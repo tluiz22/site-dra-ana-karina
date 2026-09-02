@@ -5,6 +5,27 @@ import { getAvailableSlotsForDate, type AppointmentType } from "../../../lib/sch
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
+const appointmentId = Astro.url.searchParams.get("appointment_id");
+
+if (!appointmentId) {
+  return Astro.redirect("/admin/agenda");
+}
+
+const { data: appointment } = await supabase
+  .from("appointments")
+  .select(
+    "id, appointment_type, clinic_location_id, scheduled_at, status, patients ( full_name, guardians ( full_name, phone ) )"
+  )
+  .eq("id", appointmentId)
+  .single();
+
+if (!appointment || !["scheduled", "confirmed"].includes(appointment.status)) {
+  return Astro.redirect("/admin/agenda");
+}
+
+const patient = (appointment.patients ?? null) as any;
+const guardian = patient?.guardians ?? null;
+
 const { data: clinicLocations } = await supabase
   .from("clinic_locations")
   .select("id, name, type")
@@ -27,21 +48,33 @@ function todayFortaleza(): string {
   return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+function toFortalezaDateStr(iso: string): string {
+  return new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function toFortalezaTimeStr(iso: string): string {
+  return new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(11, 16);
+}
+
+const currentDateStr = toFortalezaDateStr(appointment.scheduled_at);
+const currentTimeStr = toFortalezaTimeStr(appointment.scheduled_at);
+
 const dateParam = Astro.url.searchParams.get("date");
 const isValidDateParam = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) && dateParam >= todayFortaleza();
-const date = isValidDateParam ? dateParam : todayFortaleza();
+const date = isValidDateParam ? dateParam : currentDateStr >= todayFortaleza() ? currentDateStr : todayFortaleza();
 
 const clinicLocationId =
-  Astro.url.searchParams.get("clinic_location_id") || clinicLocations?.[0]?.id || "";
+  Astro.url.searchParams.get("clinic_location_id") || appointment.clinic_location_id || clinicLocations?.[0]?.id || "";
 
+const appointmentTypeParam = Astro.url.searchParams.get("appointment_type");
 const appointmentType: AppointmentType =
-  Astro.url.searchParams.get("appointment_type") === "return_visit" ? "return_visit" : "first_visit";
+  appointmentTypeParam === "first_visit" || appointmentTypeParam === "return_visit"
+    ? appointmentTypeParam
+    : (appointment.appointment_type as AppointmentType);
 
 const errorMessages: Record<string, string> = {
   slot_taken: "Esse horário acabou de deixar de estar livre. Escolha outro.",
-  patient_already_scheduled:
-    "Esse paciente já tem uma consulta futura marcada. Cancele ou remarque a existente antes de criar uma nova.",
-  "1": "Não foi possível marcar a consulta. Confira os dados e tente novamente.",
+  "1": "Não foi possível remarcar a consulta. Confira os dados e tente novamente.",
 };
 const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
@@ -51,10 +84,20 @@ const slots = clinicLocationId
   : [];
 ---
 
-<AdminLayout title="Marcar consulta">
-  <a href={`/admin/agenda?date=${date}`} class="text-sm text-sky-700 hover:underline">&larr; Agenda</a>
+<AdminLayout title="Remarcar consulta">
+  <a href={`/admin/agenda?date=${currentDateStr}`} class="text-sm text-sky-700 hover:underline">&larr; Agenda</a>
 
-  <h1 class="mt-3 text-2xl font-bold text-slate-900">Marcar consulta</h1>
+  <h1 class="mt-3 text-2xl font-bold text-slate-900">Remarcar consulta</h1>
+
+  <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+    <p class="font-medium">{patient?.full_name}</p>
+    <p class="text-slate-500">
+      Resp.: {guardian?.full_name} · {guardian?.phone}
+    </p>
+    <p class="mt-1 text-slate-500">
+      Atualmente em {currentDateStr.split("-").reverse().join("/")} às {currentTimeStr}
+    </p>
+  </div>
 
   {
     errorMessage && (
@@ -62,7 +105,11 @@ const slots = clinicLocationId
     )
   }
 
-  <form method="POST" action="/api/admin/agenda/appointments" class="mt-6 flex max-w-xl flex-col gap-6">
+  <form
+    method="POST"
+    action={`/api/admin/agenda/appointments/${appointmentId}/reschedule`}
+    class="mt-6 flex max-w-xl flex-col gap-6"
+  >
     <div class="flex flex-wrap items-end gap-3">
       <div>
         <label for="clinic_location_id" class="block text-sm font-medium text-slate-700">Local</label>
@@ -106,28 +153,7 @@ const slots = clinicLocationId
     </div>
 
     <div>
-      <label for="patient_search" class="block text-sm font-medium text-slate-700">Paciente</label>
-      <input
-        type="text"
-        id="patient_search"
-        autocomplete="off"
-        placeholder="Buscar pelo nome da criança ou telefone do responsável"
-        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-      />
-      <input type="hidden" id="patient_id" name="patient_id" required />
-      <div id="patient_results" class="mt-1 flex flex-col overflow-hidden rounded-md border border-slate-200 empty:hidden empty:border-0"></div>
-      <p id="patient_warning" class="mt-1 hidden text-xs text-amber-700"></p>
-      <p class="mt-1 text-xs text-slate-500">
-        Não encontrou?{" "}
-        <a href="/admin/pacientes" target="_blank" class="text-sky-700 hover:underline">
-          Cadastrar novo paciente
-        </a>{" "}
-        (abre em outra aba).
-      </p>
-    </div>
-
-    <div>
-      <span class="block text-sm font-medium text-slate-700">Horário</span>
+      <span class="block text-sm font-medium text-slate-700">Novo horário</span>
       <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
         {
           slots.length ? (
@@ -151,69 +177,12 @@ const slots = clinicLocationId
       type="submit"
       class="w-fit rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
     >
-      Confirmar agendamento
+      Confirmar remarcação
     </button>
   </form>
 </AdminLayout>
 
 <script define:vars={{ availableWeekdaysByLocation }} is:inline>
   window.__availableWeekdaysByLocation = availableWeekdaysByLocation;
-</script>
-
-<script>
-  const searchInput = document.getElementById("patient_search") as HTMLInputElement;
-  const hiddenInput = document.getElementById("patient_id") as HTMLInputElement;
-  const resultsBox = document.getElementById("patient_results") as HTMLDivElement;
-  const warningBox = document.getElementById("patient_warning") as HTMLParagraphElement;
-  let debounceTimer: ReturnType<typeof setTimeout>;
-
-  searchInput.addEventListener("input", () => {
-    hiddenInput.value = "";
-    warningBox.classList.add("hidden");
-    clearTimeout(debounceTimer);
-    const q = searchInput.value.trim();
-
-    if (q.length < 2) {
-      resultsBox.innerHTML = "";
-      return;
-    }
-
-    debounceTimer = setTimeout(async () => {
-      const response = await fetch(`/api/admin/pacientes/search?q=${encodeURIComponent(q)}`);
-      const patients = await response.json();
-      resultsBox.innerHTML = "";
-
-      patients.forEach(
-        (patient: {
-          id: string;
-          full_name: string;
-          guardian_name: string;
-          guardian_phone: string;
-          has_upcoming_appointment: boolean;
-        }) => {
-          const item = document.createElement("button");
-          item.type = "button";
-          item.className =
-            "block w-full border-t border-slate-100 px-3 py-2 text-left text-sm first:border-t-0 hover:bg-slate-100";
-          const label = `${patient.full_name} — resp. ${patient.guardian_name} (${patient.guardian_phone})`;
-          item.textContent = patient.has_upcoming_appointment ? `${label} ⚠ já tem consulta futura` : label;
-          item.addEventListener("click", () => {
-            hiddenInput.value = patient.id;
-            searchInput.value = label;
-            resultsBox.innerHTML = "";
-            if (patient.has_upcoming_appointment) {
-              warningBox.textContent =
-                "Este paciente já tem uma consulta futura marcada — confirmar aqui vai ser bloqueado até essa ser cancelada/remarcada.";
-              warningBox.classList.remove("hidden");
-            } else {
-              warningBox.classList.add("hidden");
-            }
-          });
-          resultsBox.appendChild(item);
-        }
-      );
-    }, 300);
-  });
-
 </script>
 <script src="../../../scripts/appointmentSlotPicker.ts"></script>

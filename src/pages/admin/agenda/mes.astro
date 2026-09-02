@@ -1,0 +1,175 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { listEvents } from "../../../lib/google/calendar";
+
+function todayFortaleza(): string {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function addMonths(dateStr: string, delta: number): string {
+  const [year, month] = dateStr.slice(0, 7).split("-").map(Number);
+  const totalMonths = year * 12 + (month - 1) + delta;
+  const newYear = Math.floor(totalMonths / 12);
+  const newMonth = (totalMonths % 12) + 1;
+  return `${newYear}-${String(newMonth).padStart(2, "0")}-01`;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function weekdayOf(dateStr: string): number {
+  return new Date(`${dateStr}T00:00:00-03:00`).getUTCDay();
+}
+
+function startOfWeek(dateStr: string): string {
+  const weekday = weekdayOf(dateStr);
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  return addDays(dateStr, mondayOffset);
+}
+
+function fortalezaDateStr(dateTime: string): string {
+  return new Date(new Date(dateTime).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+const monthNames = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+const weekdayLabels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+const dateParam = Astro.url.searchParams.get("date");
+const anchorDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayFortaleza();
+const monthStart = `${anchorDate.slice(0, 7)}-01`;
+const [anchorYear, anchorMonthNum] = monthStart.slice(0, 7).split("-").map(Number);
+const monthEnd = `${monthStart.slice(0, 7)}-${String(daysInMonth(anchorYear, anchorMonthNum)).padStart(2, "0")}`;
+
+const gridStart = startOfWeek(monthStart);
+const gridEnd = addDays(startOfWeek(monthEnd), 6);
+
+const gridDates: string[] = [];
+for (let cursor = gridStart; cursor <= gridEnd; cursor = addDays(cursor, 1)) {
+  gridDates.push(cursor);
+}
+
+const rangeStart = new Date(`${gridStart}T00:00:00-03:00`);
+const rangeEnd = new Date(`${addDays(gridEnd, 1)}T00:00:00-03:00`);
+const events = await listEvents(rangeStart, rangeEnd);
+
+const countsByDate = new Map<string, { active: number; cancelled: number }>();
+for (const date of gridDates) countsByDate.set(date, { active: 0, cancelled: 0 });
+for (const event of events) {
+  const dateTime = event.start.dateTime;
+  if (!dateTime) continue;
+  const appointmentId = event.extendedProperties?.private?.appointment_id;
+  if (!appointmentId) continue;
+  const entry = countsByDate.get(fortalezaDateStr(dateTime));
+  if (!entry) continue;
+  if (event.status === "cancelled") entry.cancelled++;
+  else entry.active++;
+}
+
+const currentMonthDates = new Set(gridDates.filter((date) => date >= monthStart && date <= monthEnd));
+
+const today = todayFortaleza();
+const weeks: string[][] = [];
+for (let i = 0; i < gridDates.length; i += 7) weeks.push(gridDates.slice(i, i + 7));
+---
+
+<AdminLayout title="Agenda — mês">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-slate-900">Agenda — mês</h1>
+    <div class="flex flex-wrap gap-2">
+      <a
+        href={`/admin/agenda/semana?date=${anchorDate}`}
+        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Ver por semana
+      </a>
+      <a
+        href={`/admin/agenda?date=${anchorDate}`}
+        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Ver por dia
+      </a>
+      <a
+        href={`/admin/agenda/marcar?date=${anchorDate}`}
+        class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+      >
+        Marcar consulta
+      </a>
+    </div>
+  </div>
+
+  <div class="mt-3 flex flex-wrap items-center gap-3">
+    <a href={`/admin/agenda/mes?date=${addMonths(monthStart, -1)}`} class="text-sky-700 hover:underline">
+      &larr; Mês anterior
+    </a>
+    <p class="text-sm font-semibold text-slate-900">
+      {monthNames[anchorMonthNum - 1]} de {anchorYear}
+    </p>
+    <a href={`/admin/agenda/mes?date=${addMonths(monthStart, 1)}`} class="text-sky-700 hover:underline">
+      Próximo mês &rarr;
+    </a>
+    {
+      monthStart !== `${today.slice(0, 7)}-01` && (
+        <a href="/admin/agenda/mes" class="text-sm text-slate-500 hover:underline">
+          Mês atual
+        </a>
+      )
+    }
+  </div>
+
+  <div class="mt-6 overflow-x-auto">
+    <div class="grid min-w-[640px] grid-cols-7 gap-1.5">
+      {
+        weekdayLabels.map((label) => (
+          <div class="px-1 pb-1 text-center text-xs font-medium uppercase tracking-wide text-slate-500">
+            {label}
+          </div>
+        ))
+      }
+      {
+        weeks.flatMap((week) =>
+          week.map((date) => {
+            const inCurrentMonth = currentMonthDates.has(date);
+            const isToday = date === today;
+            const counts = countsByDate.get(date) ?? { active: 0, cancelled: 0 };
+            const dayNumber = Number(date.slice(8, 10));
+
+            return (
+              <a
+                href={`/admin/agenda?date=${date}`}
+                class={`flex min-h-[76px] flex-col gap-1 rounded-md border p-2 hover:bg-slate-50 ${
+                  isToday
+                    ? "border-sky-400 bg-sky-50/40"
+                    : inCurrentMonth
+                      ? "border-slate-200 bg-white"
+                      : "border-slate-100 bg-slate-50"
+                }`}
+              >
+                <span class={`text-sm ${inCurrentMonth ? "text-slate-900" : "text-slate-400"}`}>{dayNumber}</span>
+                {counts.active > 0 && (
+                  <span class="w-fit rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
+                    {counts.active} {counts.active === 1 ? "consulta" : "consultas"}
+                  </span>
+                )}
+                {counts.cancelled > 0 && (
+                  <span class="w-fit rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                    {counts.cancelled} cancelada{counts.cancelled === 1 ? "" : "s"}
+                  </span>
+                )}
+              </a>
+            );
+          })
+        )
+      }
+    </div>
+  </div>
+</AdminLayout>

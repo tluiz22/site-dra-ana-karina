@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { queryFreeBusy } from "../google/calendar";
-import { computeAvailableSlots, type AvailableSlot } from "./slots";
+import { computeAvailableSlots, type AppointmentType, type AvailableSlot } from "./slots";
 
-export type AppointmentType = "first_visit" | "return_visit";
+export type { AppointmentType };
 
 export async function getAvailableSlotsForDate({
   supabase,
@@ -30,11 +30,6 @@ export async function getAvailableSlotsForDate({
 
   if (!windows?.length || !settings) return [];
 
-  const durationMinutes =
-    appointmentType === "return_visit"
-      ? settings.default_return_visit_duration_minutes
-      : settings.default_appointment_duration_minutes;
-
   const dayStart = new Date(`${date}T00:00:00-03:00`);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
   const busy = await queryFreeBusy(dayStart, dayEnd);
@@ -43,7 +38,9 @@ export async function getAvailableSlotsForDate({
     date,
     windows,
     busy,
-    durationMinutes,
+    appointmentType,
+    firstVisitDurationMinutes: settings.default_appointment_duration_minutes,
+    returnVisitDurationMinutes: settings.default_return_visit_duration_minutes,
     bufferMinutes: settings.buffer_minutes_between_appointments,
   });
 }

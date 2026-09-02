@@ -1,0 +1,177 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { createClient } from "../../../lib/supabase/server";
+import { listEvents, type CalendarEvent } from "../../../lib/google/calendar";
+
+const supabase = createClient(Astro.request, Astro.cookies);
+
+function todayFortaleza(): string {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function weekdayOf(dateStr: string): number {
+  return new Date(`${dateStr}T00:00:00-03:00`).getUTCDay();
+}
+
+function startOfWeek(dateStr: string): string {
+  const weekday = weekdayOf(dateStr);
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  return addDays(dateStr, mondayOffset);
+}
+
+function fortalezaDateStr(dateTime: string): string {
+  return new Date(new Date(dateTime).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function formatTime(dateTime: string | undefined): string {
+  if (!dateTime) return "—";
+  return new Date(new Date(dateTime).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(11, 16);
+}
+
+function formatShortDate(dateStr: string): string {
+  const [, month, day] = dateStr.split("-");
+  return `${day}/${month}`;
+}
+
+const dateParam = Astro.url.searchParams.get("date");
+const anchorDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayFortaleza();
+const weekStart = startOfWeek(anchorDate);
+const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+const rangeStart = new Date(`${weekDates[0]}T00:00:00-03:00`);
+const rangeEnd = new Date(`${addDays(weekDates[6], 1)}T00:00:00-03:00`);
+
+const events = await listEvents(rangeStart, rangeEnd);
+
+const appointmentIds = events
+  .map((event) => event.extendedProperties?.private?.appointment_id)
+  .filter((id): id is string => Boolean(id));
+
+const { data: appointments } = appointmentIds.length
+  ? await supabase
+      .from("appointments")
+      .select("id, appointment_type, patients ( full_name )")
+      .in("id", appointmentIds)
+  : { data: [] as any[] };
+
+const appointmentsById = new Map((appointments ?? []).map((appointment) => [appointment.id, appointment]));
+
+const appointmentTypeLabels: Record<string, string> = {
+  first_visit: "1ª consulta",
+  return_visit: "Retorno",
+};
+
+const eventsByDate = new Map<string, CalendarEvent[]>();
+for (const date of weekDates) eventsByDate.set(date, []);
+for (const event of events) {
+  const dateTime = event.start.dateTime;
+  if (!dateTime) continue;
+  const dateStr = fortalezaDateStr(dateTime);
+  eventsByDate.get(dateStr)?.push(event);
+}
+for (const list of eventsByDate.values()) {
+  list.sort((a, b) => new Date(a.start.dateTime ?? 0).getTime() - new Date(b.start.dateTime ?? 0).getTime());
+}
+
+const weekdayLabels = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const today = todayFortaleza();
+---
+
+<AdminLayout title="Agenda — semana">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-slate-900">Agenda — semana</h1>
+    <div class="flex flex-wrap gap-2">
+      <a
+        href={`/admin/agenda?date=${anchorDate}`}
+        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Ver por dia
+      </a>
+      <a
+        href={`/admin/agenda/mes?date=${anchorDate}`}
+        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Ver por mês
+      </a>
+      <a
+        href={`/admin/agenda/marcar?date=${anchorDate}`}
+        class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+      >
+        Marcar consulta
+      </a>
+    </div>
+  </div>
+
+  <div class="mt-3 flex flex-wrap items-center gap-3">
+    <a href={`/admin/agenda/semana?date=${addDays(weekStart, -7)}`} class="text-sky-700 hover:underline">
+      &larr; Semana anterior
+    </a>
+    <a href={`/admin/agenda/semana?date=${addDays(weekStart, 7)}`} class="text-sky-700 hover:underline">
+      Próxima semana &rarr;
+    </a>
+    {
+      weekStart !== startOfWeek(today) && (
+        <a href="/admin/agenda/semana" class="text-sm text-slate-500 hover:underline">
+          Semana atual
+        </a>
+      )
+    }
+  </div>
+
+  <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
+    {
+      weekDates.map((date) => {
+        const dayEvents = eventsByDate.get(date) ?? [];
+        const isToday = date === today;
+
+        return (
+          <div class={`rounded-md border p-3 ${isToday ? "border-sky-400 bg-sky-50/40" : "border-slate-200 bg-white"}`}>
+            <a href={`/admin/agenda?date=${date}`} class="block hover:underline">
+              <p class="text-sm font-semibold text-slate-900">{weekdayLabels[weekdayOf(date)]}</p>
+              <p class="text-xs text-slate-500">{formatShortDate(date)}</p>
+            </a>
+            <div class="mt-2 flex flex-col gap-1.5">
+              {dayEvents.length ? (
+                dayEvents.map((event) => {
+                  const appointmentId = event.extendedProperties?.private?.appointment_id;
+                  const appointment = appointmentId ? appointmentsById.get(appointmentId) : undefined;
+                  const isCancelled = event.status === "cancelled";
+                  const patient = (appointment?.patients ?? null) as any;
+
+                  return (
+                    <a
+                      href={`/admin/agenda?date=${date}`}
+                      class={`block rounded border px-2 py-1 text-xs hover:bg-slate-50 ${
+                        isCancelled ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-slate-200 text-slate-700"
+                      }`}
+                    >
+                      <span class="font-medium">{formatTime(event.start.dateTime)}</span>{" "}
+                      {appointment ? (
+                        <>
+                          {patient?.full_name}
+                          {appointment.appointment_type && (
+                            <span class="text-slate-400"> · {appointmentTypeLabels[appointment.appointment_type] ?? appointment.appointment_type}</span>
+                          )}
+                        </>
+                      ) : (
+                        <span class="text-slate-500">{event.summary || "Bloqueio manual"}</span>
+                      )}
+                    </a>
+                  );
+                })
+              ) : (
+                <p class="text-xs text-slate-400">Sem consultas</p>
+              )}
+            </div>
+          </div>
+        );
+      })
+    }
+  </div>
+</AdminLayout>
