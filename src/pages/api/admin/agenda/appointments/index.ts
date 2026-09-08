@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { createClient } from "../../../../../lib/supabase/server";
 import { createEvent } from "../../../../../lib/google/calendar";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../../../lib/scheduling/getAvailableSlotsForDate";
+import { sendAppointmentConfirmation } from "../../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const formData = await request.formData();
@@ -51,7 +52,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   const { data: patient } = await supabase
     .from("patients")
-    .select("full_name, guardians ( full_name, phone )")
+    .select("full_name, guardians ( id, full_name, phone )")
     .eq("id", patientId)
     .single();
 
@@ -96,7 +97,11 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return back("1");
   }
 
-  const guardian = (patient.guardians ?? null) as unknown as { full_name: string; phone: string } | null;
+  const guardian = (patient.guardians ?? null) as unknown as {
+    id: string;
+    full_name: string;
+    phone: string;
+  } | null;
 
   const event = await createEvent({
     summary: `Consulta — ${patient.full_name}${guardian ? ` (resp. ${guardian.full_name})` : ""}`,
@@ -107,6 +112,20 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   });
 
   await supabase.from("appointments").update({ google_event_id: event.id }).eq("id", newAppointment.id);
+
+  // Confirmação por WhatsApp (Fase 3a) — melhor esforço: uma falha aqui não
+  // pode invalidar a consulta já criada no Supabase e no Calendar.
+  if (guardian?.phone) {
+    await sendAppointmentConfirmation({
+      supabase,
+      appointmentId: newAppointment.id,
+      guardianId: guardian.id,
+      guardianPhone: guardian.phone,
+      patientName: patient.full_name,
+      scheduledAt: startDate,
+      locationLabel: location?.type === "clinic" ? "Consultório" : "Domiciliar",
+    });
+  }
 
   return redirect(`/admin/agenda?date=${date}`);
 };
