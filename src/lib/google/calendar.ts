@@ -7,12 +7,50 @@ export interface BusyInterval {
 
 let cachedClient: JWT | null = null;
 
+// A chave da service account chega de formas diferentes conforme a origem:
+// - Vercel: PEM com quebras de linha reais;
+// - `.env` local em PEM: numa linha só com `\n` literais, às vezes entre
+//   aspas — frágil, qualquer edição do arquivo pode truncar a chave;
+// - `.env` local em base64 (recomendado): o PEM inteiro codificado em
+//   base64, sem quebras de linha nem escapes para dar errado.
+// Sem normalizar, o OpenSSL 3 falha com
+// "error:1E08010C:DECODER routines::unsupported".
+function normalizePrivateKey(raw: string | undefined): string {
+  if (!raw) {
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY não configurada.");
+  }
+
+  let key = raw.trim();
+
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1);
+  }
+
+  // Não parece PEM → assume que é o PEM inteiro em base64.
+  if (!key.includes("-----BEGIN")) {
+    key = Buffer.from(key, "base64").toString("utf8").trim();
+  }
+
+  key = key.replace(/\\n/g, "\n").trim();
+
+  if (!key.includes("-----BEGIN") || !key.includes("PRIVATE KEY-----")) {
+    throw new Error(
+      "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY inválida: não é um PEM (-----BEGIN ... PRIVATE KEY-----) nem um base64 que decodifica para um."
+    );
+  }
+
+  return key.endsWith("\n") ? key : `${key}\n`;
+}
+
 function getAuthClient(): JWT {
   if (cachedClient) return cachedClient;
 
   cachedClient = new JWT({
     email: import.meta.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: import.meta.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    key: normalizePrivateKey(import.meta.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY),
     scopes: ["https://www.googleapis.com/auth/calendar"],
   });
 
