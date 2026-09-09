@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { createClient } from "../../../../../../lib/supabase/server";
 import { rescheduleEvent } from "../../../../../../lib/google/calendar";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../../../../lib/scheduling/getAvailableSlotsForDate";
+import { sendAppointmentReschedule } from "../../../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ params, request, cookies, redirect }) => {
   const { id } = params;
@@ -29,7 +30,7 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
 
   const { data: appointment } = await supabase
     .from("appointments")
-    .select("id, google_event_id, status")
+    .select("id, google_event_id, status, patients ( full_name, guardians ( id, full_name, phone ) )")
     .eq("id", id)
     .single();
 
@@ -73,6 +74,31 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
     start: startDate.toISOString(),
     end: endDate.toISOString(),
   });
+
+  // Notificação de remarcação por WhatsApp (Fase 3a) — melhor esforço.
+  const patient = (appointment.patients ?? null) as unknown as {
+    full_name: string;
+    guardians: { id: string; full_name: string; phone: string } | null;
+  } | null;
+  const guardian = patient?.guardians ?? null;
+
+  if (patient && guardian?.phone) {
+    const { data: location } = await supabase
+      .from("clinic_locations")
+      .select("type")
+      .eq("id", clinicLocationId)
+      .single();
+
+    await sendAppointmentReschedule({
+      supabase,
+      appointmentId: id,
+      guardianId: guardian.id,
+      guardianPhone: guardian.phone,
+      patientName: patient.full_name,
+      scheduledAt: startDate,
+      locationLabel: location?.type === "clinic" ? "Consultório" : "Domiciliar",
+    });
+  }
 
   return redirect(`/admin/agenda?date=${date}`);
 };
