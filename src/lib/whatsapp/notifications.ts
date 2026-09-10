@@ -66,6 +66,7 @@ async function sendNotification(
   const bodyPreview = spec.buildPreview(patientName, whenLabel, locationLabel);
 
   let status: string;
+  let waMessageId: string | null = null;
 
   if (!spec.templateName) {
     status = "skipped_no_template";
@@ -81,6 +82,7 @@ async function sendNotification(
         bodyParameters,
       });
       status = "sent";
+      waMessageId = id;
       console.log(`[whatsapp] ${spec.messageType} enviado (${id}) para ${guardianPhone}`);
     } catch (err) {
       status = "failed";
@@ -99,6 +101,7 @@ async function sendNotification(
     template_name: spec.templateName ?? null,
     body: bodyPreview,
     status,
+    wa_message_id: waMessageId,
   });
 
   if (error) {
