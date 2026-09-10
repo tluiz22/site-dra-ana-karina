@@ -135,3 +135,13 @@ export function sendAppointmentCancellation(input: NotificationInput): Promise<s
     buildPreview: (name, when, location) => `Consulta de ${name} de ${when} — ${location} foi cancelada.`,
   });
 }
+
+// Lembrete disparado pelo cron ~1 dia antes da consulta (o texto de "como
+// chegar" mora no próprio template aprovado na Meta, que é fixo por local).
+export function sendAppointmentReminder(input: NotificationInput): Promise<string> {
+  return sendNotification(input, {
+    messageType: "appointment_reminder",
+    templateName: import.meta.env.WHATSAPP_TEMPLATE_REMINDER,
+    buildPreview: (name, when, location) => `Lembrete: consulta de ${name} em ${when} — ${location}.`,
+  });
+}
