@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { APIRoute } from "astro";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "../../../lib/supabase/service";
@@ -25,7 +26,26 @@ export const GET: APIRoute = async ({ url }) => {
 //                         `smb_message_echoes`).
 // A máquina de estados do bot (Fase 3b) entra depois; aqui só há registro.
 export const POST: APIRoute = async ({ request }) => {
-  const payload = await request.json().catch(() => null);
+  const appSecret = import.meta.env.WHATSAPP_APP_SECRET;
+  if (!appSecret) {
+    console.error("[whatsapp webhook] WHATSAPP_APP_SECRET não configurada — POST recusado.");
+    return new Response("webhook não configurado", { status: 500 });
+  }
+
+  // A Meta assina o corpo cru (HMAC-SHA256, hex) no header
+  // X-Hub-Signature-256: "sha256=<hex>". Comparação em tempo constante.
+  const rawBody = await request.text();
+  if (!isValidSignature(appSecret, rawBody, request.headers.get("x-hub-signature-256"))) {
+    return new Response("assinatura inválida", { status: 401 });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let payload: any;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return new Response(null, { status: 200 });
+  }
 
   const changes: WebhookChangeValue[] =
     payload?.entry?.flatMap((entry: { changes?: { value?: WebhookChangeValue }[] }) =>
@@ -83,6 +103,21 @@ interface WebhookChangeValue {
 }
 
 // --- helpers ------------------------------------------------------------
+
+// Confere o header X-Hub-Signature-256 ("sha256=<hex>") contra o HMAC-SHA256
+// do corpo cru com o App Secret. Comparação em tempo constante.
+function isValidSignature(appSecret: string, rawBody: string, header: string | null): boolean {
+  if (!header?.startsWith("sha256=")) return false;
+
+  const expected = crypto.createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
+  const expectedBuf = Buffer.from(expected, "hex");
+  const receivedBuf = Buffer.from(header.slice("sha256=".length), "hex");
+
+  return (
+    expectedBuf.length === receivedBuf.length &&
+    crypto.timingSafeEqual(expectedBuf, receivedBuf)
+  );
+}
 
 // "5584981880777" (formato da Meta) → "+5584981880777".
 function toE164(waFrom: string | undefined): string | null {
