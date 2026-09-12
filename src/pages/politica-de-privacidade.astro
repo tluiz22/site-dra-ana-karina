@@ -21,17 +21,57 @@ import { doctor } from "../data/doctor";
       <section>
         <h2 class="text-xl font-bold text-slate-900">Quais dados podem ser enviados</h2>
         <p class="mt-2">
-          Quando você entra em contato pelo WhatsApp, os dados compartilhados na conversa (como
-          nome, telefone e a mensagem enviada) podem ser usados para continuar o atendimento.
+          Quando você entra em contato pelo WhatsApp para agendar, remarcar ou cancelar uma
+          consulta, coletamos: nome e telefone do responsável; nome e data de nascimento da
+          criança; local, data, horário e tipo da consulta; e o conteúdo das mensagens trocadas
+          para esse fim (confirmações, lembretes e respostas da equipe). Não é solicitado CPF, e
+          nenhuma anotação clínica, diagnóstico ou histórico médico é registrado neste
+          atendimento por WhatsApp — esses dados continuam exclusivamente no prontuário do
+          consultório.
         </p>
       </section>
 
       <section>
         <h2 class="text-xl font-bold text-slate-900">Como esses dados são usados</h2>
         <p class="mt-2">
-          Os dados enviados são usados apenas para responder seu contato, organizar informações
-          iniciais e apoiar o agendamento de consultas. O WhatsApp não substitui consulta médica,
-          avaliação presencial nem atendimento de urgência.
+          Os dados enviados são usados apenas para responder seu contato, identificar a criança e
+          o responsável, organizar informações iniciais e viabilizar o agendamento, a confirmação,
+          o lembrete e o eventual cancelamento ou remarcação de consultas. O WhatsApp não
+          substitui consulta médica, avaliação presencial nem atendimento de urgência.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Dados de crianças e consentimento</h2>
+        <p class="mt-2">
+          Como o agendamento envolve dados de crianças, o tratamento é feito sempre com base no
+          consentimento do responsável legal, que é quem entra em contato para marcar a consulta
+          em nome da criança. Os dados coletados são os estritamente necessários para o
+          agendamento (minimização de dados) e podem ser corrigidos, atualizados ou excluídos a
+          pedido do responsável a qualquer momento, pelos canais indicados ao final desta página.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Onde os dados ficam armazenados</h2>
+        <p class="mt-2">
+          Os dados de agendamento são armazenados em um banco de dados de uso interno da equipe
+          (médica e secretária), hospedado pela Supabase, e a agenda em si é mantida no Google
+          Agenda (Google Calendar) do consultório. As mensagens trocadas pelo WhatsApp são
+          processadas pela API oficial da Meta (WhatsApp Cloud API). Nenhum desses dados é usado
+          para fins de marketing ou repassado a terceiros fora do que é necessário para o
+          funcionamento do agendamento.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-slate-900">Por quanto tempo os dados ficam guardados</h2>
+        <p class="mt-2">
+          Os dados de cadastro e o histórico de consultas são mantidos enquanto durar o vínculo da
+          família com o consultório. Uma solicitação de exclusão de cadastro é atendida
+          removendo o responsável e a criança das buscas e listagens ativas, preservando apenas o
+          registro do histórico de consultas já realizadas, conforme exigido para fins
+          administrativos.
         </p>
       </section>
 
@@ -49,7 +89,8 @@ import { doctor } from "../data/doctor";
         <h2 class="text-xl font-bold text-slate-900">Compartilhamento e cuidados</h2>
         <p class="mt-2">
           As informações são tratadas com cuidado e apenas na medida necessária para o contato e o
-          agendamento. Nenhuma medida de segurança digital oferece garantia absoluta.
+          agendamento. O acesso ao sistema de agendamento é restrito à médica e à secretária.
+          Nenhuma medida de segurança digital oferece garantia absoluta.
         </p>
       </section>
 
