@@ -7,7 +7,7 @@ export interface AvailableDate {
   weekday: number;
 }
 
-const DEFAULT_DATE_COUNT = 6;
+const DEFAULT_DATE_COUNT = 10;
 const MAX_DAYS_AHEAD = 60;
 
 function todayFortaleza(): string {

@@ -1,0 +1,309 @@
+---
+import "../../styles/global.css";
+import Footer from "../../components/Footer.astro";
+import { createServiceClient } from "../../lib/supabase/service";
+import { getNextAvailableDates } from "../../lib/scheduling/getNextAvailableDates";
+import { getAvailableSlotsForDate, type AppointmentType } from "../../lib/scheduling/getAvailableSlotsForDate";
+
+const { token } = Astro.params;
+const supabase = createServiceClient();
+
+const { data: link } = token
+  ? await supabase
+      .from("booking_links")
+      .select(
+        `id, mode, appointment_type, clinic_location_id, expires_at, used_at,
+         guardians ( full_name, phone ),
+         patients ( full_name, birthdate ),
+         clinic_locations ( name, type ),
+         appointments ( scheduled_at )`
+      )
+      .eq("id", token)
+      .maybeSingle()
+  : { data: null };
+
+type PageState = "invalid" | "used" | "expired" | "form";
+
+const state: PageState = !link
+  ? "invalid"
+  : link.used_at
+    ? "used"
+    : new Date(link.expires_at) < new Date()
+      ? "expired"
+      : "form";
+
+const guardian = (link?.guardians ?? null) as unknown as { full_name: string; phone: string } | null;
+const patient = (link?.patients ?? null) as unknown as { full_name: string; birthdate: string } | null;
+const location = (link?.clinic_locations ?? null) as unknown as { name: string; type: string } | null;
+const currentAppointment = (link?.appointments ?? null) as unknown as { scheduled_at: string } | null;
+const locationLabel = location?.type === "clinic" ? "Consultório" : "Atendimento domiciliar";
+
+function formatDateBR(dateStr: string): string {
+  const [year, month, day] = dateStr.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function formatWeekdayFull(dateStr: string): string {
+  const label = new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: "America/Fortaleza" }).format(
+    new Date(`${dateStr}T12:00:00-03:00`)
+  );
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatDateTimeBR(iso: string): string {
+  const datePart = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Fortaleza",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(iso));
+  const timePart = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Fortaleza",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(new Date(iso))
+    .replace(":", "h");
+  return `${datePart} às ${timePart}`;
+}
+
+let availableDates: { date: string; weekday: number }[] = [];
+let initialSlots: { start: Date; label: string }[] = [];
+let selectedDate = "";
+
+if (state === "form" && link) {
+  const appointmentType = link.appointment_type as AppointmentType;
+
+  availableDates = await getNextAvailableDates({
+    supabase,
+    clinicLocationId: link.clinic_location_id,
+    appointmentType,
+  });
+
+  const dateParam = Astro.url.searchParams.get("date");
+  selectedDate =
+    dateParam && availableDates.some((d) => d.date === dateParam) ? dateParam : (availableDates[0]?.date ?? "");
+
+  if (selectedDate) {
+    initialSlots = await getAvailableSlotsForDate({
+      supabase,
+      clinicLocationId: link.clinic_location_id,
+      date: selectedDate,
+      appointmentType,
+    });
+  }
+}
+
+const errorMessages: Record<string, string> = {
+  slot_taken: "Esse horário acabou de deixar de estar livre. Escolha outro.",
+  "1": "Não foi possível confirmar a consulta. Tente novamente.",
+};
+const errorParam = Astro.url.searchParams.get("error");
+const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
+
+const pageTitle = link?.mode === "reschedule" ? "Remarcar consulta" : "Agendar consulta";
+---
+
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{pageTitle} | Dra. Ana Karina Fernandes</title>
+  </head>
+  <body class="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+    <main class="mx-auto w-full max-w-xl flex-1 px-4 py-10">
+      {
+        state === "invalid" && (
+          <div class="rounded-md border border-slate-200 bg-white p-6 text-center">
+            <h1 class="text-lg font-bold text-slate-900">Link inválido</h1>
+            <p class="mt-2 text-sm text-slate-600">
+              Este link de agendamento não existe. Volte à conversa no WhatsApp e peça um novo.
+            </p>
+          </div>
+        )
+      }
+
+      {
+        state === "expired" && (
+          <div class="rounded-md border border-slate-200 bg-white p-6 text-center">
+            <h1 class="text-lg font-bold text-slate-900">Link expirado</h1>
+            <p class="mt-2 text-sm text-slate-600">
+              Este link de agendamento venceu. Volte à conversa no WhatsApp e peça um novo link.
+            </p>
+          </div>
+        )
+      }
+
+      {
+        state === "used" && (
+          <div class="rounded-md border border-emerald-200 bg-emerald-50 p-6 text-center">
+            <h1 class="text-lg font-bold text-emerald-900">Consulta confirmada!</h1>
+            <p class="mt-2 text-sm text-emerald-800">
+              {patient?.full_name}
+              {currentAppointment && (
+                <>
+                  {" "}
+                  — {formatDateTimeBR(currentAppointment.scheduled_at)} · {locationLabel}
+                </>
+              )}
+            </p>
+            <p class="mt-4 text-sm text-emerald-800">
+              Você também vai receber a confirmação pelo WhatsApp.
+            </p>
+            <a
+              href="https://dranakarinacamurca.com.br"
+              class="mt-6 inline-block rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+            >
+              Voltar para o site
+            </a>
+          </div>
+        )
+      }
+
+      {
+        state === "form" && link && (
+          <>
+            <h1 class="text-2xl font-bold text-slate-900">{pageTitle}</h1>
+            <p class="mt-1 text-sm text-slate-600">
+              {locationLabel} · {link.appointment_type === "return_visit" ? "Retorno" : "Primeira consulta"}
+            </p>
+
+            {link.mode === "reschedule" && currentAppointment && (
+              <p class="mt-2 text-sm text-slate-600">
+                Consulta atual: {formatDateTimeBR(currentAppointment.scheduled_at)}
+              </p>
+            )}
+
+            {errorMessage && (
+              <p class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+            )}
+
+            <div class="mt-6 rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-700">
+              <p class="font-medium text-slate-900">Responsável</p>
+              <p>
+                {guardian?.full_name} · {guardian?.phone}
+              </p>
+            </div>
+
+            <div class="mt-3 rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-700">
+              <p class="font-medium text-slate-900">Criança</p>
+              <p>
+                {patient?.full_name}
+                {patient?.birthdate && ` · nascido(a) em ${formatDateBR(patient.birthdate)}`}
+              </p>
+            </div>
+
+            <form
+              method="POST"
+              action={`/api/agendar/${link.id}/confirmar`}
+              class="mt-6 flex flex-col gap-6"
+            >
+              <div>
+                <label for="date" class="block text-sm font-medium text-slate-700">
+                  Data da consulta
+                </label>
+                {availableDates.length ? (
+                  <select
+                    id="date"
+                    name="date"
+                    class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    {availableDates.map((d) => (
+                      <option value={d.date} selected={d.date === selectedDate}>
+                        {formatWeekdayFull(d.date)}, {formatDateBR(d.date)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p class="mt-1 text-sm text-slate-500">
+                    Não encontramos horários livres nos próximos dias. Fale com a secretária pelo
+                    WhatsApp.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <span class="block text-sm font-medium text-slate-700">Horário da consulta</span>
+                <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
+                  {initialSlots.length ? (
+                    initialSlots.map((slot) => (
+                      <label class="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50">
+                        <input type="radio" name="start" value={slot.start.toISOString()} required class="mr-1" />
+                        {slot.label}
+                      </label>
+                    ))
+                  ) : (
+                    <p class="text-sm text-slate-500">Nenhum horário livre nesse dia. Escolha outra data.</p>
+                  )}
+                </div>
+              </div>
+
+              <button
+                id="submit_btn"
+                type="submit"
+                disabled={!availableDates.length}
+                class="w-fit rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Confirmar consulta
+              </button>
+            </form>
+          </>
+        )
+      }
+    </main>
+    <Footer />
+  </body>
+</html>
+
+<script define:vars={{ token: link?.id ?? "" }} is:inline>
+  window.__bookingToken = token;
+</script>
+<script>
+  const dateSelect = document.getElementById("date") as HTMLSelectElement | null;
+  const slotsContainer = document.getElementById("slots_container") as HTMLDivElement | null;
+  const submitBtn = document.getElementById("submit_btn") as HTMLButtonElement | null;
+  const token = (window as any).__bookingToken as string;
+
+  if (dateSelect && slotsContainer && submitBtn && token) {
+    dateSelect.addEventListener("change", async () => {
+      slotsContainer.innerHTML = '<p class="text-sm text-slate-500">Buscando horários…</p>';
+      submitBtn.disabled = true;
+
+      const params = new URLSearchParams({ date: dateSelect.value });
+      const response = await fetch(`/api/agendar/${token}/slots?${params.toString()}`);
+
+      if (!response.ok) {
+        slotsContainer.innerHTML =
+          '<p class="text-sm text-red-700">Não foi possível buscar os horários. Tente novamente.</p>';
+        return;
+      }
+
+      const { slots } = await response.json();
+      slotsContainer.innerHTML = "";
+
+      if (!slots.length) {
+        slotsContainer.innerHTML =
+          '<p class="text-sm text-slate-500">Nenhum horário livre nesse dia. Escolha outra data.</p>';
+        return;
+      }
+
+      submitBtn.disabled = false;
+      slots.forEach((slot: { start: string; label: string }) => {
+        const label = document.createElement("label");
+        label.className =
+          "cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50";
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "start";
+        input.value = slot.start;
+        input.required = true;
+        input.className = "mr-1";
+        label.appendChild(input);
+        label.append(slot.label);
+        slotsContainer.appendChild(label);
+      });
+    });
+  }
+</script>
