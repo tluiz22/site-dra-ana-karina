@@ -2,10 +2,10 @@
 //
 // Chamado pelo webhook (`src/pages/api/whatsapp/webhook.ts`) para cada
 // mensagem inbound do paciente, depois que ela já foi registrada em
-// `whatsapp_messages`. Cobre por enquanto WELCOME → MENU → INFO_MENU →
-// HUMAN_HANDOFF (case 4 · Informações Gerais, completo) — os cases
-// Agendar/Cancelar/Remarcar (1–3) respondem com um texto provisório até
-// serem implementados nas próximas etapas (ver checkpoint do plano).
+// `whatsapp_messages`. Cobre WELCOME → MENU → INFO_MENU → HUMAN_HANDOFF
+// (case 4 · Informações Gerais, completo) e delega os estados de
+// Agendar (case 1) para `./booking.ts`. Cancelar/Remarcar (cases 2–3)
+// ainda respondem com um texto provisório (ver checkpoint do plano).
 //
 // Nunca lança: erros de uma etapa não devem impedir o webhook de responder
 // 200 rápido para a Meta.
@@ -13,18 +13,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WaMessage } from "../types";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
-import { resolveGuardianId } from "./shared";
+import {
+  extractSelection,
+  matchesOption,
+  resolveGuardianId,
+  sendAndLog,
+  updateConversationState,
+  type Selection,
+} from "./shared";
+import { BOOKING_STATES, handleBookingState, startBooking } from "./booking";
 import * as texts from "./messages";
-
-interface Selection {
-  id: string | null;
-  text: string;
-}
 
 interface ConversationStateRow {
   state: string;
   guardian_id: string | null;
   atendimento_humano: boolean;
+  context: Record<string, unknown> | null;
 }
 
 export async function routeIncomingMessage(
@@ -34,7 +38,7 @@ export async function routeIncomingMessage(
 ): Promise<void> {
   const { data: convo, error } = await supabase
     .from("conversation_state")
-    .select("state, guardian_id, atendimento_humano")
+    .select("state, guardian_id, atendimento_humano, context")
     .eq("guardian_phone", guardianPhone)
     .maybeSingle<ConversationStateRow>();
 
@@ -53,6 +57,12 @@ export async function routeIncomingMessage(
 
   const guardianId = convo.guardian_id ?? (await resolveGuardianId(supabase, guardianPhone));
   const selection = extractSelection(waMsg);
+  const context = convo.context ?? {};
+
+  if (BOOKING_STATES.has(convo.state)) {
+    await handleBookingState(supabase, guardianPhone, guardianId, convo.state, context, selection);
+    return;
+  }
 
   switch (convo.state) {
     case "WELCOME":
@@ -65,96 +75,17 @@ export async function routeIncomingMessage(
       await handleInfoMenu(supabase, guardianPhone, guardianId, selection);
       return;
     default:
-      // Estados dos cases 1–3 (Agendar/Cancelar/Remarcar) ainda não
-      // implementados no roteador — devolve para o menu principal em vez de
-      // deixar a conversa travada num estado sem handler.
-      await setState(supabase, guardianPhone, "MENU");
+      // Estados dos cases 2–3 (Cancelar/Remarcar) ainda não implementados no
+      // roteador — devolve para o menu principal em vez de deixar a
+      // conversa travada num estado sem handler.
+      await updateConversationState(supabase, guardianPhone, "MENU");
       await sendMenu(supabase, guardianPhone, guardianId);
   }
 }
 
-// --- extração da resposta do usuário ------------------------------------
+// --- menus (compartilhados por WELCOME/MENU/INFO_MENU) --------------------
 
-function extractSelection(waMsg: WaMessage): Selection {
-  const id = waMsg.interactive?.list_reply?.id ?? waMsg.interactive?.button_reply?.id ?? null;
-  const text = (
-    waMsg.text?.body ??
-    waMsg.interactive?.list_reply?.title ??
-    waMsg.interactive?.button_reply?.title ??
-    waMsg.button?.text ??
-    ""
-  ).trim();
-  return { id, text };
-}
-
-// Aceita tanto o toque na lista interativa (`selection.id`) quanto o
-// paciente digitando o número diretamente (ex.: "1" ou "1. Agendar").
-function matchesOption(selection: Selection, digit: string, listId: string): boolean {
-  if (selection.id === listId) return true;
-  const normalized = selection.text.toLowerCase();
-  return normalized === digit || normalized.startsWith(`${digit}.`) || normalized.startsWith(`${digit} `);
-}
-
-// --- estado -------------------------------------------------------------
-
-async function setState(
-  supabase: SupabaseClient,
-  guardianPhone: string,
-  state: string,
-  extra: Record<string, unknown> = {}
-): Promise<void> {
-  const { error } = await supabase
-    .from("conversation_state")
-    .update({ state, ...extra })
-    .eq("guardian_phone", guardianPhone);
-  if (error) {
-    console.error("[whatsapp bot] erro ao atualizar conversation_state:", error.message);
-  }
-}
-
-// --- envio + log ----------------------------------------------------------
-
-async function sendAndLog(
-  supabase: SupabaseClient,
-  guardianId: string | null,
-  messageType: string,
-  bodyForLog: string,
-  send: () => Promise<{ id: string }>
-): Promise<void> {
-  try {
-    const { id } = await send();
-    await logOutbound(supabase, guardianId, messageType, bodyForLog, id, "sent");
-  } catch (err) {
-    console.error(
-      `[whatsapp bot] falha ao enviar ${messageType}:`,
-      err instanceof Error ? err.message : String(err)
-    );
-    await logOutbound(supabase, guardianId, messageType, bodyForLog, null, "failed");
-  }
-}
-
-async function logOutbound(
-  supabase: SupabaseClient,
-  guardianId: string | null,
-  messageType: string,
-  body: string,
-  waMessageId: string | null,
-  status: string
-): Promise<void> {
-  const { error } = await supabase.from("whatsapp_messages").insert({
-    guardian_id: guardianId,
-    direction: "outbound",
-    message_type: messageType,
-    body,
-    status,
-    wa_message_id: waMessageId,
-  });
-  if (error) {
-    console.error("[whatsapp bot] erro ao registrar mensagem de saída:", error.message);
-  }
-}
-
-async function sendMenu(
+export async function sendMenu(
   supabase: SupabaseClient,
   guardianPhone: string,
   guardianId: string | null
@@ -198,7 +129,7 @@ async function handleWelcome(
     sendTextMessage({ to: guardianPhone, body: welcome })
   );
   await sendMenu(supabase, guardianPhone, guardianId);
-  await setState(supabase, guardianPhone, "MENU");
+  await updateConversationState(supabase, guardianPhone, "MENU");
 }
 
 // --- MENU -------------------------------------------------------------
@@ -209,8 +140,12 @@ async function handleMenu(
   guardianId: string | null,
   selection: Selection
 ): Promise<void> {
+  if (matchesOption(selection, "1", texts.MENU_LIST_ID.agendar)) {
+    await startBooking(supabase, guardianPhone, guardianId);
+    return;
+  }
+
   if (
-    matchesOption(selection, "1", texts.MENU_LIST_ID.agendar) ||
     matchesOption(selection, "2", texts.MENU_LIST_ID.cancelar) ||
     matchesOption(selection, "3", texts.MENU_LIST_ID.remarcar)
   ) {
@@ -224,7 +159,7 @@ async function handleMenu(
 
   if (matchesOption(selection, "4", texts.MENU_LIST_ID.informacoes)) {
     await sendInfoMenu(supabase, guardianPhone, guardianId);
-    await setState(supabase, guardianPhone, "INFO_MENU");
+    await updateConversationState(supabase, guardianPhone, "INFO_MENU");
     return;
   }
 
@@ -285,7 +220,7 @@ async function handleInfoMenu(
     await sendAndLog(supabase, guardianId, "bot_handoff", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await setState(supabase, guardianPhone, "HUMAN_HANDOFF", { atendimento_humano: true });
+    await updateConversationState(supabase, guardianPhone, "HUMAN_HANDOFF", { atendimento_humano: true });
     return;
   }
 

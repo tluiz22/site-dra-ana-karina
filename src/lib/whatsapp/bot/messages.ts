@@ -94,7 +94,7 @@ export function valoresText(locations: ClinicLocationRow[]): string {
 
   const linhas = locations.map((loc) => {
     const label = loc.type === "home_visit" ? "Atendimento domiciliar" : loc.name;
-    return `*${label}*\nPrimeira consulta: ${formatCents(loc.price_first_visit_cents)}\nRetorno: ${formatCents(loc.price_return_visit_cents)}`;
+    return `*${label}*\nConsulta: ${formatCents(loc.price_first_visit_cents)}\nRetorno: ${formatCents(loc.price_return_visit_cents)}`;
   });
 
   return `${linhas.join("\n\n")}\n\nPagamento no dia da consulta (dinheiro, cartão ou Pix) — sem cobrança antecipada.`;
@@ -128,4 +128,112 @@ export function handoffText(): string {
     "Combinado! Vou te transferir para a secretária, que responde por aqui assim que possível. " +
     "O atendimento automático fica pausado até lá."
   );
+}
+
+// --- case 1 · Agendar -------------------------------------------------
+
+export const MODALITY_LIST_ID = {
+  firstVisit: "book_modality_first",
+  returnVisit: "book_modality_return",
+} as const;
+
+export function modalityBodyText(): string {
+  return "Vamos agendar! Você quer marcar uma consulta ou um retorno?";
+}
+
+export function modalitySections(): ListSection[] {
+  return [
+    {
+      rows: [
+        { id: MODALITY_LIST_ID.firstVisit, title: "1. Consulta" },
+        { id: MODALITY_LIST_ID.returnVisit, title: "2. Retorno" },
+      ],
+    },
+  ];
+}
+
+export interface LocationOption {
+  id: string;
+  label: string;
+}
+
+export function locationBodyText(): string {
+  return "Prefere consultório ou atendimento domiciliar?";
+}
+
+export function locationSections(options: LocationOption[]): ListSection[] {
+  return [
+    {
+      rows: options.map((opt, index) => ({
+        id: `book_location_${opt.id}`,
+        title: `${index + 1}. ${opt.label}`,
+      })),
+    },
+  ];
+}
+
+export function noLocationAvailableText(): string {
+  return "No momento não temos nenhum local de atendimento configurado — escolha [4] Falar com a secretária no menu principal.";
+}
+
+interface PatientCandidate {
+  id: string;
+  full_name: string;
+}
+
+export function patientChoiceBodyText(): string {
+  return "Encontramos consultas futuras para estas crianças. Para qual delas é o agendamento?";
+}
+
+export const PATIENT_NEW_LIST_ID = "book_patient_new";
+
+export function patientChoiceSections(candidates: PatientCandidate[]): ListSection[] {
+  const rows = candidates.map((c, index) => ({
+    id: `book_patient_${c.id}`,
+    title: `${index + 1}. ${c.full_name}`,
+  }));
+  rows.push({ id: PATIENT_NEW_LIST_ID, title: `${candidates.length + 1}. Outra criança` });
+  return [{ rows }];
+}
+
+export function askBirthdateText(): string {
+  return (
+    "Encontramos várias crianças cadastradas nesse telefone. " +
+    "Qual a data de nascimento da criança? (formato dd/mm/aaaa)"
+  );
+}
+
+export function invalidBirthdateText(): string {
+  return "Não consegui entender essa data. Por favor, digite no formato dd/mm/aaaa (ex.: 10/03/2020).";
+}
+
+export function confirmPatientText(fullName: string, birthdateLabel: string): string {
+  return `Encontramos *${fullName}*, nascido(a) em ${birthdateLabel} — é essa a criança? Responda Sim ou Não.`;
+}
+
+export function notUnderstoodYesNoText(): string {
+  return "Não entendi 🙏 Responda apenas Sim ou Não.";
+}
+
+export function askGuardianNameText(): string {
+  return "Antes de continuar, qual é o seu nome completo (responsável pela criança)?";
+}
+
+export function askNewPatientNameText(): string {
+  return "Qual é o nome completo da criança?";
+}
+
+export function askNewPatientBirthdateText(): string {
+  return "Qual a data de nascimento da criança? (formato dd/mm/aaaa)";
+}
+
+export function bookingLinkText(patientName: string, url: string): string {
+  return (
+    `Prontinho! Escolha o melhor dia e horário para a consulta de ${patientName} neste link:\n${url}\n\n` +
+    "O link expira em 30 minutos."
+  );
+}
+
+export function bookingLinkErrorText(): string {
+  return "Tivemos um problema para gerar o link de agendamento. Por favor, escolha [4] Falar com a secretária no menu principal.";
 }

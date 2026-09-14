@@ -105,7 +105,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   const event = await createEvent({
     summary: `Consulta — ${patient.full_name}${guardian ? ` (resp. ${guardian.full_name})` : ""}`,
-    description: `Tel: ${guardian?.phone ?? "—"} | Tipo: ${appointmentType === "return_visit" ? "Retorno" : "Primeira consulta"} | Local: ${location?.type === "clinic" ? "Consultório" : "Domiciliar"}`,
+    description: `Tel: ${guardian?.phone ?? "—"} | Tipo: ${appointmentType === "return_visit" ? "Retorno" : "Consulta"} | Local: ${location?.type === "clinic" ? "Consultório" : "Domiciliar"}`,
     start: startDate.toISOString(),
     end: endDate.toISOString(),
     appointmentId: newAppointment.id,
