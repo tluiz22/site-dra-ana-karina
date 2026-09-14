@@ -73,3 +73,33 @@ export async function sendTextMessage({ to, body }: { to: string; body: string }
     text: { body },
   });
 }
+
+// Mensagem interativa de lista (usada pelo menu principal e pelo submenu de
+// Informações Gerais da Fase 3b) — mesma janela de 24h da mensagem de texto.
+export interface ListSection {
+  title?: string;
+  rows: { id: string; title: string; description?: string }[];
+}
+
+export async function sendInteractiveListMessage({
+  to,
+  bodyText,
+  buttonText,
+  sections,
+}: {
+  to: string;
+  bodyText: string;
+  buttonText: string;
+  sections: ListSection[];
+}): Promise<{ id: string }> {
+  return postToGraphApi({
+    messaging_product: "whatsapp",
+    to: to.replace(/^\+/, ""),
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: bodyText },
+      action: { button: buttonText, sections },
+    },
+  });
+}

@@ -2,6 +2,9 @@ import crypto from "node:crypto";
 import type { APIRoute } from "astro";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "../../../lib/supabase/service";
+import type { WaMessage } from "../../../lib/whatsapp/types";
+import { routeIncomingMessage } from "../../../lib/whatsapp/bot/router";
+import { resolveGuardianId, returnControlToBot, toE164 } from "../../../lib/whatsapp/bot/shared";
 
 // GET: handshake de verificação exigido pela Meta ao cadastrar a URL do
 // webhook no painel do App (WhatsApp > Configuração > Webhooks).
@@ -23,8 +26,10 @@ export const GET: APIRoute = async ({ url }) => {
 //   - `statuses`        → status de entrega das mensagens que enviamos;
 //   - `message_echoes`  → mensagens que a secretária enviou pelo app do
 //                         WhatsApp Business (coexistência — campo
-//                         `smb_message_echoes`).
-// A máquina de estados do bot (Fase 3b) entra depois; aqui só há registro.
+//                         `smb_message_echoes`; também é aqui que a
+//                         palavra-chave "#bot" devolve a conversa ao bot).
+// Toda `messages` inbound também é passada para o roteador da máquina de
+// estados do bot (`../../../lib/whatsapp/bot/router.ts`, Fase 3b).
 export const POST: APIRoute = async ({ request }) => {
   const appSecret = import.meta.env.WHATSAPP_APP_SECRET;
   if (!appSecret) {
@@ -61,6 +66,18 @@ export const POST: APIRoute = async ({ request }) => {
   for (const value of changes) {
     for (const msg of value.messages ?? []) {
       await handleInboundMessage(supabase, msg);
+
+      // Máquina de estados do bot (Fase 3b) — roda depois do registro em
+      // whatsapp_messages. Erro aqui não deve impedir a resposta 200 à Meta.
+      const phone = toE164(msg.from);
+      if (phone) {
+        await routeIncomingMessage(supabase, phone, msg).catch((err) => {
+          console.error(
+            "[whatsapp webhook] erro no roteador do bot:",
+            err instanceof Error ? err.message : String(err)
+          );
+        });
+      }
     }
     for (const status of value.statuses ?? []) {
       await handleDeliveryStatus(supabase, status);
@@ -75,19 +92,8 @@ export const POST: APIRoute = async ({ request }) => {
 };
 
 // --- tipos mínimos do payload -------------------------------------------
-
-interface WaMessage {
-  id?: string;
-  from?: string;
-  to?: string;
-  type?: string;
-  text?: { body?: string };
-  button?: { text?: string };
-  interactive?: {
-    list_reply?: { id?: string; title?: string };
-    button_reply?: { id?: string; title?: string };
-  };
-}
+// `WaMessage` mora em `../../../lib/whatsapp/types.ts` (compartilhado com
+// o roteador do bot em `../../../lib/whatsapp/bot/router.ts`).
 
 interface WaStatus {
   id?: string;
@@ -119,11 +125,6 @@ function isValidSignature(appSecret: string, rawBody: string, header: string | n
   );
 }
 
-// "5584981880777" (formato da Meta) → "+5584981880777".
-function toE164(waFrom: string | undefined): string | null {
-  return waFrom && /^\d{10,15}$/.test(waFrom) ? `+${waFrom}` : null;
-}
-
 // Texto legível de uma mensagem recebida ou de um echo.
 function extractBody(msg: WaMessage): string | null {
   if (msg.text?.body) return msg.text.body;
@@ -135,19 +136,6 @@ function extractBody(msg: WaMessage): string | null {
   }
   if (msg.button?.text) return msg.button.text;
   return msg.type ? `[${msg.type}]` : null;
-}
-
-async function resolveGuardianId(
-  supabase: SupabaseClient,
-  phoneE164: string
-): Promise<string | null> {
-  const { data } = await supabase
-    .from("guardians")
-    .select("id")
-    .eq("phone", phoneE164)
-    .eq("is_active", true)
-    .maybeSingle();
-  return data?.id ?? null;
 }
 
 // Ordem dos status de entrega — evita regredir se a Meta entregar os
@@ -231,6 +219,7 @@ async function handleAgentEcho(supabase: SupabaseClient, echo: WaMessage): Promi
 
   const recipient = toE164(echo.to);
   const guardianId = recipient ? await resolveGuardianId(supabase, recipient) : null;
+  const body = extractBody(echo);
 
   const { error } = await supabase.from("whatsapp_messages").upsert(
     {
@@ -238,12 +227,19 @@ async function handleAgentEcho(supabase: SupabaseClient, echo: WaMessage): Promi
       guardian_id: guardianId,
       direction: "outbound",
       message_type: "agent_reply",
-      body: extractBody(echo),
+      body,
       status: "sent",
     },
     { onConflict: "wa_message_id", ignoreDuplicates: true }
   );
   if (error) {
     console.error("[whatsapp webhook] erro ao registrar echo:", error.message);
+  }
+
+  // Palavra-chave "#bot" da secretária dentro do próprio app do WhatsApp
+  // Business devolve a conversa ao bot (ver "Coexistência" no plano) — match
+  // case-insensitive em qualquer parte da mensagem.
+  if (recipient && body && /#bot/i.test(body)) {
+    await returnControlToBot(supabase, recipient);
   }
 }
