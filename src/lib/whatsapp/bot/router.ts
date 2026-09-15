@@ -4,9 +4,8 @@
 // mensagem inbound do paciente, depois que ela já foi registrada em
 // `whatsapp_messages`. Cobre WELCOME → MENU → INFO_MENU → HUMAN_HANDOFF
 // (case 4 · Informações Gerais, completo) e delega os estados de Agendar
-// (case 1, `./booking.ts`) e Remarcar (case 3, `./reschedule.ts`).
-// Cancelar (case 2) ainda responde com um texto provisório (ver checkpoint
-// do plano).
+// (case 1, `./booking.ts`), Cancelar (case 2, `./cancel.ts`) e Remarcar
+// (case 3, `./reschedule.ts`) — os quatro cases do menu principal completos.
 //
 // Nunca lança: erros de uma etapa não devem impedir o webhook de responder
 // 200 rápido para a Meta.
@@ -23,6 +22,7 @@ import {
   type Selection,
 } from "./shared";
 import { BOOKING_STATES, handleBookingState, startBooking } from "./booking";
+import { CANCEL_STATES, handleCancelState, startCancel } from "./cancel";
 import { RESCHEDULE_STATES, handleRescheduleState, startReschedule } from "./reschedule";
 import * as texts from "./messages";
 
@@ -71,6 +71,11 @@ export async function routeIncomingMessage(
     return;
   }
 
+  if (CANCEL_STATES.has(convo.state)) {
+    await handleCancelState(supabase, guardianPhone, guardianId, convo.state, context, selection);
+    return;
+  }
+
   switch (convo.state) {
     case "WELCOME":
       await handleWelcome(supabase, guardianPhone, guardianId);
@@ -82,9 +87,9 @@ export async function routeIncomingMessage(
       await handleInfoMenu(supabase, guardianPhone, guardianId, selection);
       return;
     default:
-      // Estados do case 2 (Cancelar) ainda não implementados no roteador —
-      // devolve para o menu principal em vez de deixar a conversa travada
-      // num estado sem handler.
+      // Estado desconhecido/obsoleto (ex.: enum antigo já removido da
+      // máquina de estados) — devolve para o menu principal em vez de
+      // deixar a conversa travada num estado sem handler.
       await updateConversationState(supabase, guardianPhone, "MENU");
       await sendMenu(supabase, guardianPhone, guardianId);
   }
@@ -153,11 +158,7 @@ async function handleMenu(
   }
 
   if (matchesOption(selection, "2", texts.MENU_LIST_ID.cancelar)) {
-    const body = texts.comingSoonText();
-    await sendAndLog(supabase, guardianId, "bot_coming_soon", body, () =>
-      sendTextMessage({ to: guardianPhone, body })
-    );
-    await sendMenu(supabase, guardianPhone, guardianId);
+    await startCancel(supabase, guardianPhone, guardianId);
     return;
   }
 

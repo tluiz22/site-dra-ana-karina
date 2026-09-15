@@ -49,15 +49,6 @@ export function notUnderstoodText(): string {
   return "Não entendi sua resposta 🙏 Escolha uma das opções abaixo.";
 }
 
-// Usado enquanto Agendar/Cancelar/Remarcar (cases 1–3) ainda não estão
-// implementados no roteador — ver checkpoint do plano.
-export function comingSoonText(): string {
-  return (
-    "Essa opção ainda está sendo implementada por aqui. Enquanto isso, escolha " +
-    "[4] Informações gerais > Falar com a secretária para agendar, cancelar ou remarcar sua consulta."
-  );
-}
-
 export function infoMenuBodyText(): string {
   return "O que você gostaria de saber?";
 }
@@ -239,15 +230,12 @@ export function bookingLinkErrorText(): string {
   return "Tivemos um problema para gerar o link de agendamento. Por favor, escolha [4] Falar com a secretária no menu principal.";
 }
 
-// --- case 3 · Remarcar --------------------------------------------------
-
-export function rescheduleNoGuardianText(): string {
-  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
-}
-
-export function rescheduleNoAppointmentsText(): string {
-  return "Não encontramos nenhuma consulta futura para remarcar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
-}
+// --- identificação de consulta futura (compartilhada pelos cases 2 e 3) --
+//
+// Mesmo princípio anti-convênio do case 1 · Agendar: nunca listar às cegas
+// todas as consultas de um responsável (ver "Identificação da criança" no
+// plano). Usado tanto por Cancelar (bot/cancel.ts) quanto por Remarcar
+// (bot/reschedule.ts).
 
 interface AppointmentCandidate {
   id: string;
@@ -255,15 +243,15 @@ interface AppointmentCandidate {
   scheduled_at: string;
 }
 
-export function appointmentChoiceBodyText(): string {
-  return "Qual consulta você quer remarcar?";
+export function appointmentChoiceBodyText(action: "remarcar" | "cancelar"): string {
+  return `Qual consulta você quer ${action}?`;
 }
 
-export function appointmentChoiceSections(candidates: AppointmentCandidate[]): ListSection[] {
+export function appointmentListSections(candidates: AppointmentCandidate[], idPrefix: string): ListSection[] {
   return [
     {
       rows: candidates.map((c, index) => ({
-        id: `reschedule_${c.id}`,
+        id: `${idPrefix}_${c.id}`,
         title: `${index + 1}. ${c.patient_name}`,
         description: formatWhen(new Date(c.scheduled_at)),
       })),
@@ -273,6 +261,20 @@ export function appointmentChoiceSections(candidates: AppointmentCandidate[]): L
 
 export function noMatchingAppointmentText(): string {
   return "Não encontramos consulta futura para essa data de nascimento. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+}
+
+export function couldNotIdentifyAppointmentText(): string {
+  return "Não conseguimos confirmar qual consulta é. Escolha [4] Falar com a secretária no menu principal.";
+}
+
+// --- case 3 · Remarcar --------------------------------------------------
+
+export function rescheduleNoGuardianText(): string {
+  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
+}
+
+export function rescheduleNoAppointmentsText(): string {
+  return "Não encontramos nenhuma consulta futura para remarcar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
 }
 
 export function confirmAppointmentText(patientName: string, whenLabel: string): string {
@@ -290,6 +292,31 @@ export function rescheduleLinkErrorText(): string {
   return "Tivemos um problema para gerar o link de remarcação. Por favor, escolha [4] Falar com a secretária no menu principal.";
 }
 
-export function couldNotIdentifyAppointmentText(): string {
-  return "Não conseguimos confirmar qual consulta é. Escolha [4] Falar com a secretária no menu principal para remarcar.";
+// --- case 2 · Cancelar ----------------------------------------------------
+
+export function cancelNoGuardianText(): string {
+  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
+}
+
+export function cancelNoAppointmentsText(): string {
+  return "Não encontramos nenhuma consulta futura para cancelar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+}
+
+export function confirmCancelText(patientName: string, whenLabel: string): string {
+  return `Confirma o cancelamento da consulta de *${patientName}* em ${whenLabel}? Responda Sim ou Não.`;
+}
+
+export function cancelAbortedText(): string {
+  return "Ok, mantivemos sua consulta marcada.";
+}
+
+export function cancelSuccessText(patientName: string, whenLabel: string): string {
+  return (
+    `Prontinho, cancelamos a consulta de ${patientName} que estava marcada para ${whenLabel}. ` +
+    "Se precisar marcar uma nova consulta, é só me chamar de novo."
+  );
+}
+
+export function cancelErrorText(): string {
+  return "Tivemos um problema para cancelar a consulta. Por favor, escolha [4] Falar com a secretária no menu principal.";
 }

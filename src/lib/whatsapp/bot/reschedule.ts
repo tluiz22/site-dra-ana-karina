@@ -12,26 +12,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
 import { formatWhen } from "../formatDateTime";
 import {
+  fetchUpcomingAppointments,
   parseBirthdateInput,
   resolveByListOrDigit,
   resolveSiteUrl,
   sendAndLog,
   updateConversationState,
+  type AppointmentCandidate,
   type Selection,
 } from "./shared";
 import * as texts from "./messages";
 
 export const RESCHEDULE_STATES: ReadonlySet<string> = new Set(["RESCHEDULE_SELECT"]);
-
-interface AppointmentCandidate {
-  id: string;
-  patient_id: string;
-  patient_name: string;
-  birthdate: string;
-  scheduled_at: string;
-  clinic_location_id: string;
-  appointment_type: "first_visit" | "return_visit";
-}
 
 interface RescheduleContext {
   awaiting?: "appointment_choice" | "birthdate_search" | "confirm_appointment";
@@ -54,16 +46,7 @@ export async function startReschedule(
     return;
   }
 
-  const nowIso = new Date().toISOString();
-  const { data: rows } = await supabase
-    .from("appointments")
-    .select("id, scheduled_at, clinic_location_id, appointment_type, patient_id, patients!inner(full_name, birthdate, guardian_id)")
-    .eq("patients.guardian_id", guardianId)
-    .in("status", ["scheduled", "confirmed"])
-    .gt("scheduled_at", nowIso)
-    .order("scheduled_at", { ascending: true });
-
-  const candidates = (rows ?? []).map(mapAppointmentRow);
+  const candidates = await fetchUpcomingAppointments(supabase, guardianId);
   await presentCandidates(supabase, guardianPhone, guardianId, candidates);
 }
 
@@ -210,13 +193,13 @@ async function sendAppointmentChoice(
   guardianId: string | null,
   candidates: AppointmentCandidate[]
 ): Promise<void> {
-  const body = texts.appointmentChoiceBodyText();
+  const body = texts.appointmentChoiceBodyText("remarcar");
   await sendAndLog(supabase, guardianId, "bot_reschedule_choice", body, () =>
     sendInteractiveListMessage({
       to: guardianPhone,
       bodyText: body,
       buttonText: "Escolher opção",
-      sections: texts.appointmentChoiceSections(candidates),
+      sections: texts.appointmentListSections(candidates, "reschedule"),
     })
   );
 }
@@ -272,17 +255,4 @@ async function sendRescheduleLinkError(
     sendTextMessage({ to: guardianPhone, body })
   );
   await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapAppointmentRow(row: any): AppointmentCandidate {
-  return {
-    id: row.id,
-    patient_id: row.patient_id,
-    patient_name: row.patients?.full_name ?? "Paciente",
-    birthdate: row.patients?.birthdate ?? "",
-    scheduled_at: row.scheduled_at,
-    clinic_location_id: row.clinic_location_id,
-    appointment_type: row.appointment_type,
-  };
 }

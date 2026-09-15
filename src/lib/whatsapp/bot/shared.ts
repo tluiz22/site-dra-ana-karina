@@ -144,6 +144,52 @@ export async function sendAndLog(
   }
 }
 
+// --- consultas futuras de um responsável (cases 2 e 3) --------------------
+//
+// Mesmo princípio anti-convênio do case 1 · Agendar: a lista completa fica
+// no `conversation_state.context` e cada chamador (cancel.ts/reschedule.ts)
+// decide como apresentá-la (lista direta até 3, ou pergunta a data de
+// nascimento acima disso) — ver "Identificação da criança" no plano.
+
+export interface AppointmentCandidate {
+  id: string;
+  patient_id: string;
+  patient_name: string;
+  birthdate: string;
+  scheduled_at: string;
+  clinic_location_id: string;
+  appointment_type: "first_visit" | "return_visit";
+  google_event_id: string | null;
+}
+
+export async function fetchUpcomingAppointments(
+  supabase: SupabaseClient,
+  guardianId: string
+): Promise<AppointmentCandidate[]> {
+  const nowIso = new Date().toISOString();
+  const { data: rows } = await supabase
+    .from("appointments")
+    .select(
+      "id, scheduled_at, clinic_location_id, appointment_type, google_event_id, patient_id, patients!inner(full_name, birthdate, guardian_id)"
+    )
+    .eq("patients.guardian_id", guardianId)
+    .in("status", ["scheduled", "confirmed"])
+    .gt("scheduled_at", nowIso)
+    .order("scheduled_at", { ascending: true });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (rows ?? []).map((row: any) => ({
+    id: row.id,
+    patient_id: row.patient_id,
+    patient_name: row.patients?.full_name ?? "Paciente",
+    birthdate: row.patients?.birthdate ?? "",
+    scheduled_at: row.scheduled_at,
+    clinic_location_id: row.clinic_location_id,
+    appointment_type: row.appointment_type,
+    google_event_id: row.google_event_id ?? null,
+  }));
+}
+
 // --- data de nascimento (usada nos cases 1 e 3 para identificar a criança) -
 
 // "10/03/2020" → "2020-03-10". Recusa datas impossíveis (ex. 31/02) e datas
