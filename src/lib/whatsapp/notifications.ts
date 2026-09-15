@@ -8,29 +8,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendTemplateMessage } from "./client";
-
-const TIMEZONE = "America/Fortaleza";
-
-// Formato: "21/08/2026 às 14h00" (fuso do consultório, não do servidor).
-function formatWhen(date: Date): string {
-  const datePart = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: TIMEZONE,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
-
-  const timePart = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
-    .format(date)
-    .replace(":", "h");
-
-  return `${datePart} às ${timePart}`;
-}
+import { formatWhen } from "./formatDateTime";
 
 interface NotificationInput {
   supabase: SupabaseClient;

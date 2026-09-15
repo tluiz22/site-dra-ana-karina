@@ -3,6 +3,7 @@
 // ajustar sem mexer na lógica de estados.
 
 import type { ListSection } from "../client";
+import { formatWhen } from "../formatDateTime";
 
 const DOCTOR_NAME = "Dra. Ana Karina Fernandes";
 
@@ -236,4 +237,59 @@ export function bookingLinkText(patientName: string, url: string): string {
 
 export function bookingLinkErrorText(): string {
   return "Tivemos um problema para gerar o link de agendamento. Por favor, escolha [4] Falar com a secretária no menu principal.";
+}
+
+// --- case 3 · Remarcar --------------------------------------------------
+
+export function rescheduleNoGuardianText(): string {
+  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
+}
+
+export function rescheduleNoAppointmentsText(): string {
+  return "Não encontramos nenhuma consulta futura para remarcar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+}
+
+interface AppointmentCandidate {
+  id: string;
+  patient_name: string;
+  scheduled_at: string;
+}
+
+export function appointmentChoiceBodyText(): string {
+  return "Qual consulta você quer remarcar?";
+}
+
+export function appointmentChoiceSections(candidates: AppointmentCandidate[]): ListSection[] {
+  return [
+    {
+      rows: candidates.map((c, index) => ({
+        id: `reschedule_${c.id}`,
+        title: `${index + 1}. ${c.patient_name}`,
+        description: formatWhen(new Date(c.scheduled_at)),
+      })),
+    },
+  ];
+}
+
+export function noMatchingAppointmentText(): string {
+  return "Não encontramos consulta futura para essa data de nascimento. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+}
+
+export function confirmAppointmentText(patientName: string, whenLabel: string): string {
+  return `Encontramos a consulta de *${patientName}* em ${whenLabel} — é essa que você quer remarcar? Responda Sim ou Não.`;
+}
+
+export function rescheduleLinkText(patientName: string, url: string): string {
+  return (
+    `Prontinho! Escolha o novo dia e horário para a consulta de ${patientName} neste link:\n${url}\n\n` +
+    "O link expira em 30 minutos."
+  );
+}
+
+export function rescheduleLinkErrorText(): string {
+  return "Tivemos um problema para gerar o link de remarcação. Por favor, escolha [4] Falar com a secretária no menu principal.";
+}
+
+export function couldNotIdentifyAppointmentText(): string {
+  return "Não conseguimos confirmar qual consulta é. Escolha [4] Falar com a secretária no menu principal para remarcar.";
 }

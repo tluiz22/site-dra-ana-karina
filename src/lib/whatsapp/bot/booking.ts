@@ -9,7 +9,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
 import {
+  formatBirthdateLabel,
   matchesOption,
+  parseBirthdateInput,
+  resolveByListOrDigit,
   resolveSiteUrl,
   sendAndLog,
   updateConversationState,
@@ -555,42 +558,3 @@ function dedupePatients(
   return [...seen.values()];
 }
 
-// Resolve tanto pelo `id` da lista interativa quanto pelo dígito digitado
-// (posição 1-based na mesma ordem em que as opções foram enviadas).
-function resolveByListOrDigit<T>(
-  selection: Selection,
-  list: T[],
-  idBuilder: (item: T) => string
-): T | null {
-  if (selection.id) {
-    const found = list.find((item) => idBuilder(item) === selection.id);
-    if (found) return found;
-  }
-  const index = Number.parseInt(selection.text.trim(), 10);
-  if (Number.isInteger(index) && index >= 1 && index <= list.length) return list[index - 1];
-  return null;
-}
-
-// "10/03/2020" → "2020-03-10". Recusa datas impossíveis (ex. 31/02) e datas
-// futuras (data de nascimento não pode estar no futuro).
-function parseBirthdateInput(text: string): string | null {
-  const match = text.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (!match) return null;
-
-  const day = Number.parseInt(match[1], 10);
-  const month = Number.parseInt(match[2], 10);
-  const year = Number.parseInt(match[3], 10);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-
-  const date = new Date(Date.UTC(year, month - 1, day));
-  const isRealDate =
-    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-  if (!isRealDate || date.getTime() > Date.now()) return null;
-
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function formatBirthdateLabel(isoDate: string): string {
-  const [year, month, day] = isoDate.split("-");
-  return `${day}/${month}/${year}`;
-}
