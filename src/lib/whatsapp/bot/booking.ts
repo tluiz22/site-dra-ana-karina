@@ -59,6 +59,15 @@ interface BookingContext {
   pending_patient?: PendingPatient;
   new_guardian_name?: string;
   new_patient_name?: string;
+  // Data de nascimento já coletada antes de chegar em "new_patient_name"
+  // (veio de uma busca por duplicidade) — evita perguntar de novo em
+  // "new_patient_birthdate".
+  known_birthdate?: string;
+  // Diferencia o texto do estado "birthdate_search" quando há mais de uma
+  // criança com a mesma data: desambiguar entre várias crianças com
+  // consulta futura (texto padrão) vs. checagem de duplicidade ao
+  // cadastrar uma criança nova (texto dedicado).
+  birthdate_search_reason?: "duplicate_check";
 }
 
 // MENU opção 1 → primeira pergunta do fluxo (modalidade).
@@ -241,7 +250,7 @@ async function enterPatientSelect(
   const candidates = dedupePatients(rows ?? []);
 
   if (candidates.length === 0) {
-    await askNewPatientName(supabase, guardianPhone, guardianId, context);
+    await beginNewPatientRegistration(supabase, guardianPhone, guardianId, context);
     return;
   }
 
@@ -266,9 +275,10 @@ async function sendPatientChoice(
   supabase: SupabaseClient,
   guardianPhone: string,
   guardianId: string | null,
-  candidates: PatientCandidate[]
+  candidates: PatientCandidate[],
+  bodyTextOverride?: string
 ): Promise<void> {
-  const body = texts.patientChoiceBodyText();
+  const body = bodyTextOverride ?? texts.patientChoiceBodyText();
   await sendAndLog(supabase, guardianId, "bot_book_patient_choice", body, () =>
     sendInteractiveListMessage({
       to: guardianPhone,
@@ -279,11 +289,44 @@ async function sendPatientChoice(
   );
 }
 
-async function askNewPatientName(
+// Antes de cadastrar uma criança nova para um responsável já existente,
+// pergunta a data de nascimento e verifica se já existe alguma criança com
+// essa data cadastrada para esse responsável (não só as com consulta
+// futura) — evita duplicar o cadastro de uma criança já existente com o
+// nome digitado de um jeito ligeiramente diferente (achado testando com
+// número real: "Mateus Carvalho" x "Mateus Carvalho de Sousa"). Um
+// responsável sendo cadastrado agora pela primeira vez (telefone novo)
+// não pode ter outra criança cadastrada, então pula direto para o nome.
+async function beginNewPatientRegistration(
   supabase: SupabaseClient,
   guardianPhone: string,
   guardianId: string | null,
   context: BookingContext
+): Promise<void> {
+  if (!guardianId) {
+    await askNewPatientName(supabase, guardianPhone, guardianId, context);
+    return;
+  }
+
+  const body = texts.askBirthdateForDuplicateCheckText();
+  await sendAndLog(supabase, guardianId, "bot_book_ask_birthdate", body, () =>
+    sendTextMessage({ to: guardianPhone, body })
+  );
+  await updateConversationState(supabase, guardianPhone, "BOOK_PATIENT_SELECT", {
+    context: {
+      ...context,
+      awaiting: "birthdate_search",
+      birthdate_search_reason: "duplicate_check",
+    } satisfies BookingContext,
+  });
+}
+
+async function askNewPatientName(
+  supabase: SupabaseClient,
+  guardianPhone: string,
+  guardianId: string | null,
+  context: BookingContext,
+  knownBirthdate?: string
 ): Promise<void> {
   const body = texts.askNewPatientNameText();
   await sendAndLog(supabase, guardianId, "bot_book_ask_patient_name", body, () =>
@@ -294,6 +337,7 @@ async function askNewPatientName(
     clinic_location_id: context.clinic_location_id,
     clinic_location_label: context.clinic_location_label,
     awaiting: "new_patient_name",
+    known_birthdate: knownBirthdate,
   };
   await updateConversationState(supabase, guardianPhone, "BOOK_PATIENT_NEW", { context: cleanContext });
 }
@@ -311,7 +355,15 @@ async function handlePatientSelect(
       selection.id === texts.PATIENT_NEW_LIST_ID || selection.text.trim() === String(candidates.length + 1);
 
     if (isOther) {
-      await askNewPatientName(supabase, guardianPhone, guardianId, context);
+      // Se essa lista veio de uma busca por data de nascimento (gêmeos ou
+      // checagem de duplicidade), a data já é conhecida — não pergunta de
+      // novo. Se veio da lista original de crianças com consulta futura,
+      // ainda não sabemos a data — inicia a checagem de duplicidade.
+      if (context.known_birthdate) {
+        await askNewPatientName(supabase, guardianPhone, guardianId, context, context.known_birthdate);
+      } else {
+        await beginNewPatientRegistration(supabase, guardianPhone, guardianId, context);
+      }
       return;
     }
 
@@ -347,7 +399,7 @@ async function handlePatientSelect(
       .eq("birthdate", isoBirthdate);
 
     if (!matches || matches.length === 0) {
-      await askNewPatientName(supabase, guardianPhone, guardianId, context);
+      await askNewPatientName(supabase, guardianPhone, guardianId, context, isoBirthdate);
       return;
     }
 
@@ -364,9 +416,16 @@ async function handlePatientSelect(
     }
 
     // Mais de uma criança com a mesma data de nascimento (ex.: gêmeos).
-    await sendPatientChoice(supabase, guardianPhone, guardianId, matches);
+    const bodyTextOverride =
+      context.birthdate_search_reason === "duplicate_check" ? texts.birthdateMatchChoiceBodyText() : undefined;
+    await sendPatientChoice(supabase, guardianPhone, guardianId, matches, bodyTextOverride);
     await updateConversationState(supabase, guardianPhone, "BOOK_PATIENT_SELECT", {
-      context: { ...context, awaiting: "patient_choice", patient_candidates: matches } satisfies BookingContext,
+      context: {
+        ...context,
+        awaiting: "patient_choice",
+        patient_candidates: matches,
+        known_birthdate: isoBirthdate,
+      } satisfies BookingContext,
     });
     return;
   }
@@ -384,7 +443,7 @@ async function handlePatientSelect(
       return;
     }
     if (answer.startsWith("n")) {
-      await askNewPatientName(supabase, guardianPhone, guardianId, context);
+      await askNewPatientName(supabase, guardianPhone, guardianId, context, pending.birthdate);
       return;
     }
 
@@ -436,6 +495,14 @@ async function handlePatientNew(
       );
       return;
     }
+
+    // Data de nascimento já coletada na checagem de duplicidade — não
+    // pergunta de novo, cadastra direto.
+    if (context.known_birthdate) {
+      await createPatientAndFinishBooking(supabase, guardianPhone, guardianId, context, text, context.known_birthdate);
+      return;
+    }
+
     const body = texts.askNewPatientBirthdateText();
     await sendAndLog(supabase, guardianId, "bot_book_ask_birthdate", body, () =>
       sendTextMessage({ to: guardianPhone, body })
@@ -456,37 +523,53 @@ async function handlePatientNew(
       return;
     }
 
-    let guardianIdToUse = guardianId;
-    if (!guardianIdToUse) {
-      const guardianName = context.new_guardian_name ?? "Responsável";
-      const { data: newGuardian, error } = await supabase
-        .from("guardians")
-        .insert({ full_name: guardianName, phone: guardianPhone })
-        .select("id")
-        .single();
-      if (error || !newGuardian) {
-        console.error("[whatsapp bot] erro ao cadastrar responsável:", error?.message);
-        await sendBookingLinkError(supabase, guardianPhone, guardianId);
-        return;
-      }
-      guardianIdToUse = newGuardian.id;
-    }
-
     const patientName = context.new_patient_name ?? "Paciente";
-    const { data: newPatient, error: patientError } = await supabase
-      .from("patients")
-      .insert({ full_name: patientName, birthdate: isoBirthdate, guardian_id: guardianIdToUse })
+    await createPatientAndFinishBooking(supabase, guardianPhone, guardianId, context, patientName, isoBirthdate);
+  }
+}
+
+// Cadastra o responsável (se ainda não existir) e a criança, e finaliza o
+// agendamento com o paciente recém-criado. Compartilhado pelos dois
+// caminhos que chegam a um cadastro novo: telefone novo (pergunta nome e
+// depois data de nascimento) e responsável já existente com a data de
+// nascimento coletada antes, na checagem de duplicidade.
+async function createPatientAndFinishBooking(
+  supabase: SupabaseClient,
+  guardianPhone: string,
+  guardianId: string | null,
+  context: BookingContext,
+  patientName: string,
+  isoBirthdate: string
+): Promise<void> {
+  let guardianIdToUse = guardianId;
+  if (!guardianIdToUse) {
+    const guardianName = context.new_guardian_name ?? "Responsável";
+    const { data: newGuardian, error } = await supabase
+      .from("guardians")
+      .insert({ full_name: guardianName, phone: guardianPhone })
       .select("id")
       .single();
-
-    if (patientError || !newPatient) {
-      console.error("[whatsapp bot] erro ao cadastrar criança:", patientError?.message);
-      await sendBookingLinkError(supabase, guardianPhone, guardianIdToUse);
+    if (error || !newGuardian) {
+      console.error("[whatsapp bot] erro ao cadastrar responsável:", error?.message);
+      await sendBookingLinkError(supabase, guardianPhone, guardianId);
       return;
     }
-
-    await finishBookingWithPatient(supabase, guardianPhone, guardianIdToUse, context, newPatient.id, patientName);
+    guardianIdToUse = newGuardian.id;
   }
+
+  const { data: newPatient, error: patientError } = await supabase
+    .from("patients")
+    .insert({ full_name: patientName, birthdate: isoBirthdate, guardian_id: guardianIdToUse })
+    .select("id")
+    .single();
+
+  if (patientError || !newPatient) {
+    console.error("[whatsapp bot] erro ao cadastrar criança:", patientError?.message);
+    await sendBookingLinkError(supabase, guardianPhone, guardianIdToUse);
+    return;
+  }
+
+  await finishBookingWithPatient(supabase, guardianPhone, guardianIdToUse, context, newPatient.id, patientName);
 }
 
 // --- finalização: gera e envia o link de `/agendar/[token]` --------------

@@ -208,6 +208,20 @@ export function askBirthdateText(): string {
   );
 }
 
+// Usado ao cadastrar uma criança nova, antes de pedir o nome — evita
+// duplicar o cadastro de uma criança já existente (sem consulta futura)
+// com o nome digitado de um jeito ligeiramente diferente.
+export function askBirthdateForDuplicateCheckText(): string {
+  return (
+    "Para não duplicar o cadastro, qual é a data de nascimento da criança? " +
+    "(formato dd/mm/aaaa)"
+  );
+}
+
+export function birthdateMatchChoiceBodyText(): string {
+  return "Encontramos crianças já cadastradas com essa data de nascimento nesse telefone. É uma delas?";
+}
+
 export function invalidBirthdateText(): string {
   return "Não consegui entender essa data. Por favor, digite no formato dd/mm/aaaa (ex.: 10/03/2020).";
 }
