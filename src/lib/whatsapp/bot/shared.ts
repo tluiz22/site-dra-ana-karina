@@ -93,6 +93,18 @@ export interface Selection {
   text: string;
 }
 
+// Opção "voltar ao menu principal", incluída em todas as listas do bot (ver
+// `router.ts`, que intercepta essa seleção antes de qualquer estado
+// específico — funciona em qualquer ponto da conversa, inclusive nos
+// prompts de texto livre como nome/data de nascimento).
+export const BACK_TO_MENU_LIST_ID = "back_to_menu";
+
+export function isBackToMenuSelection(selection: Selection): boolean {
+  if (selection.id === BACK_TO_MENU_LIST_ID) return true;
+  const normalized = selection.text.trim().toLowerCase();
+  return normalized === "0" || normalized === "menu" || normalized === "menu principal";
+}
+
 export function extractSelection(waMsg: {
   text?: { body?: string };
   interactive?: {

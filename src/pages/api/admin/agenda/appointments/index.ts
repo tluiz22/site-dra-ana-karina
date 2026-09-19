@@ -75,7 +75,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   const { data: location } = await supabase
     .from("clinic_locations")
-    .select("type")
+    .select("type, address, price_first_visit_cents")
     .eq("id", clinicLocationId)
     .single();
 
@@ -124,6 +124,10 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
       patientName: patient.full_name,
       scheduledAt: startDate,
       locationLabel: location?.type === "clinic" ? "Consultório" : "Domiciliar",
+      locationAddress: location?.address ?? null,
+      // Retorno não tem valor próprio — está incluso no valor da consulta
+      // anterior (decisão do cliente); `null` aciona esse texto na notificação.
+      priceCents: appointmentType === "return_visit" ? null : location?.price_first_visit_cents,
     });
   }
 

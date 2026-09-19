@@ -4,6 +4,8 @@
 
 import type { ListSection } from "../client";
 import { formatWhen } from "../formatDateTime";
+import { formatCentsBRL } from "../../money";
+import { BACK_TO_MENU_LIST_ID } from "./shared";
 
 const DOCTOR_NAME = "Dra. Ana Karina Fernandes";
 
@@ -59,7 +61,7 @@ export function menuSections(): ListSection[] {
 }
 
 export function notUnderstoodText(): string {
-  return "Não entendi sua resposta 🙏 Escolha uma das opções abaixo.";
+  return "Não entendi sua resposta 🙏 Escolha uma das opções abaixo (ou digite 0 para voltar ao menu principal).";
 }
 
 export function infoMenuBodyText(): string {
@@ -74,20 +76,16 @@ export function infoMenuSections(): ListSection[] {
         { id: INFO_LIST_ID.convenios, title: listRowTitle(1, "Convênios") },
         { id: INFO_LIST_ID.endereco, title: listRowTitle(2, "Endereço") },
         { id: INFO_LIST_ID.secretaria, title: listRowTitle(3, "Falar com secretária") },
+        { id: BACK_TO_MENU_LIST_ID, title: listRowTitle(4, "Voltar ao menu") },
       ],
     },
   ];
-}
-
-function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 interface ClinicLocationRow {
   name: string;
   type: string;
   price_first_visit_cents: number;
-  price_return_visit_cents: number;
 }
 
 // Decisão de negócio #2/#3 do plano: o bot sempre informa o valor e reforça
@@ -99,10 +97,14 @@ export function valoresText(locations: ClinicLocationRow[]): string {
 
   const linhas = locations.map((loc) => {
     const label = loc.type === "home_visit" ? "Atendimento domiciliar" : loc.name;
-    return `*${label}*\nConsulta: ${formatCents(loc.price_first_visit_cents)}\nRetorno: ${formatCents(loc.price_return_visit_cents)}`;
+    return `*${label}*\nConsulta: ${formatCentsBRL(loc.price_first_visit_cents)}`;
   });
 
-  return `${linhas.join("\n\n")}\n\nPagamento no dia da consulta (dinheiro, cartão ou Pix) — sem cobrança antecipada.`;
+  return (
+    `${linhas.join("\n\n")}\n\n` +
+    "O retorno está incluso no valor da consulta.\n\n" +
+    "Pagamento no dia da consulta (dinheiro, transferência bancária ou PIX) — sem cobrança antecipada."
+  );
 }
 
 // Decisão de negócio #1 do plano: atendimento particular + recibo para
@@ -119,13 +121,30 @@ interface ClinicAddressRow {
   address: string | null;
 }
 
-export function enderecoText(clinicLocation: ClinicAddressRow | null): string {
-  if (!clinicLocation?.address) {
+// Lista todos os consultórios cadastrados (não só um) — preparado para
+// quando houver mais de um endereço físico de consultório (ver "Backlog
+// futuro" no plano). Como a data escolhida decide para qual consultório a
+// consulta vai, o texto deixa claro que o endereço definitivo só é
+// confirmado depois, na mensagem de confirmação.
+export function enderecoText(clinicLocations: ClinicAddressRow[]): string {
+  const withAddress = clinicLocations.filter(
+    (loc): loc is ClinicAddressRow & { address: string } => !!loc.address
+  );
+
+  if (withAddress.length === 0) {
     return "O endereço do consultório ainda não está cadastrado por aqui — escolha [4] Falar com a secretária para confirmar.";
   }
 
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clinicLocation.address)}`;
-  return `*${clinicLocation.name}*\n${clinicLocation.address}\n${mapsUrl}`;
+  const linhas = withAddress.map((loc) => {
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc.address)}`;
+    return `*${loc.name}*\n${loc.address}\n${mapsUrl}`;
+  });
+
+  const intro = withAddress.length > 1 ? "Temos os seguintes consultórios:" : null;
+  const outro =
+    "O endereço da sua consulta será confirmado na mensagem de confirmação, de acordo com a data escolhida.";
+
+  return [intro, ...linhas, outro].filter(Boolean).join("\n\n");
 }
 
 export function handoffText(): string {
@@ -152,6 +171,7 @@ export function modalitySections(): ListSection[] {
       rows: [
         { id: MODALITY_LIST_ID.firstVisit, title: listRowTitle(0, "Consulta") },
         { id: MODALITY_LIST_ID.returnVisit, title: listRowTitle(1, "Retorno") },
+        { id: BACK_TO_MENU_LIST_ID, title: listRowTitle(2, "Voltar ao menu") },
       ],
     },
   ];
@@ -167,14 +187,12 @@ export function locationBodyText(): string {
 }
 
 export function locationSections(options: LocationOption[]): ListSection[] {
-  return [
-    {
-      rows: options.map((opt, index) => ({
-        id: `book_location_${opt.id}`,
-        title: listRowTitle(index, opt.label),
-      })),
-    },
-  ];
+  const rows = options.map((opt, index) => ({
+    id: `book_location_${opt.id}`,
+    title: listRowTitle(index, opt.label),
+  }));
+  rows.push({ id: BACK_TO_MENU_LIST_ID, title: listRowTitle(options.length, "Voltar ao menu") });
+  return [{ rows }];
 }
 
 export function noLocationAvailableText(): string {
@@ -198,6 +216,7 @@ export function patientChoiceSections(candidates: PatientCandidate[]): ListSecti
     title: listRowTitle(index, c.full_name),
   }));
   rows.push({ id: PATIENT_NEW_LIST_ID, title: listRowTitle(candidates.length, "Outra criança") });
+  rows.push({ id: BACK_TO_MENU_LIST_ID, title: listRowTitle(candidates.length + 1, "Voltar ao menu") });
   return [{ rows }];
 }
 
@@ -275,15 +294,13 @@ export function appointmentChoiceBodyText(action: "remarcar" | "cancelar"): stri
 }
 
 export function appointmentListSections(candidates: AppointmentCandidate[], idPrefix: string): ListSection[] {
-  return [
-    {
-      rows: candidates.map((c, index) => ({
-        id: `${idPrefix}_${c.id}`,
-        title: listRowTitle(index, c.patient_name),
-        description: formatWhen(new Date(c.scheduled_at)),
-      })),
-    },
-  ];
+  const rows = candidates.map((c, index) => ({
+    id: `${idPrefix}_${c.id}`,
+    title: listRowTitle(index, c.patient_name),
+    description: formatWhen(new Date(c.scheduled_at)),
+  }));
+  rows.push({ id: BACK_TO_MENU_LIST_ID, title: listRowTitle(candidates.length, "Voltar ao menu"), description: "" });
+  return [{ rows }];
 }
 
 export function noMatchingAppointmentText(): string {

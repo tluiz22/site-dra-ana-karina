@@ -15,6 +15,7 @@ import type { WaMessage } from "../types";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
 import {
   extractSelection,
+  isBackToMenuSelection,
   matchesOption,
   resolveGuardianId,
   sendAndLog,
@@ -67,6 +68,16 @@ export async function routeIncomingMessage(
   const guardianId = convo.guardian_id ?? (await resolveGuardianId(supabase, guardianPhone));
   const selection = extractSelection(waMsg);
   const context = convo.context ?? {};
+
+  // "Voltar ao menu principal" funciona em qualquer estado do meio da
+  // conversa (toque na opção da lista, ou digitar "0"/"menu") — pedido do
+  // cliente para não deixar o responsável preso num sub-fluxo. WELCOME/MENU
+  // ficam de fora: já mostram o menu ou ainda nem chegaram lá.
+  if (convo.state !== "WELCOME" && convo.state !== "MENU" && isBackToMenuSelection(selection)) {
+    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await sendMenu(supabase, guardianPhone, guardianId);
+    return;
+  }
 
   if (BOOKING_STATES.has(convo.state)) {
     await handleBookingState(supabase, guardianPhone, guardianId, convo.state, context, selection);
@@ -198,7 +209,7 @@ async function handleInfoMenu(
   if (matchesOption(selection, "1", texts.INFO_LIST_ID.valores)) {
     const { data } = await supabase
       .from("clinic_locations")
-      .select("name, type, price_first_visit_cents, price_return_visit_cents")
+      .select("name, type, price_first_visit_cents")
       .eq("is_active", true);
     const body = texts.valoresText(data ?? []);
     await sendAndLog(supabase, guardianId, "bot_info_valores", body, () =>
@@ -222,9 +233,8 @@ async function handleInfoMenu(
       .from("clinic_locations")
       .select("name, address")
       .eq("type", "clinic")
-      .eq("is_active", true)
-      .maybeSingle();
-    const body = texts.enderecoText(data ?? null);
+      .eq("is_active", true);
+    const body = texts.enderecoText(data ?? []);
     await sendAndLog(supabase, guardianId, "bot_info_endereco", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );

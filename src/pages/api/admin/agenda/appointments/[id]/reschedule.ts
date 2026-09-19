@@ -85,7 +85,7 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   if (patient && guardian?.phone) {
     const { data: location } = await supabase
       .from("clinic_locations")
-      .select("type")
+      .select("type, address")
       .eq("id", clinicLocationId)
       .single();
 
@@ -97,6 +97,7 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
       patientName: patient.full_name,
       scheduledAt: startDate,
       locationLabel: location?.type === "clinic" ? "Consultório" : "Domiciliar",
+      locationAddress: location?.address ?? null,
     });
   }
 

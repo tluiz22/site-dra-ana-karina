@@ -56,7 +56,11 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
       .select("full_name, guardians ( id, full_name, phone )")
       .eq("id", link.patient_id)
       .single(),
-    supabase.from("clinic_locations").select("type").eq("id", link.clinic_location_id).single(),
+    supabase
+      .from("clinic_locations")
+      .select("type, address, price_first_visit_cents")
+      .eq("id", link.clinic_location_id)
+      .single(),
   ]);
 
   if (!patient) {
@@ -69,6 +73,10 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     phone: string;
   } | null;
   const locationLabel = location?.type === "clinic" ? "Consultório" : "Domiciliar";
+  const locationAddress = location?.address ?? null;
+  // Retorno não tem valor próprio — está incluso no valor da consulta
+  // anterior (decisão do cliente); `null` aciona esse texto na notificação.
+  const priceCents = appointmentType === "return_visit" ? null : location?.price_first_visit_cents;
 
   let appointmentId: string;
 
@@ -109,6 +117,7 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
         patientName: patient.full_name,
         scheduledAt: startDate,
         locationLabel,
+        locationAddress,
       });
     }
   } else {
@@ -166,6 +175,8 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
         patientName: patient.full_name,
         scheduledAt: startDate,
         locationLabel,
+        locationAddress,
+        priceCents,
       });
     }
   }
