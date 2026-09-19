@@ -12,10 +12,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
 import { formatWhen } from "../formatDateTime";
 import {
+  buildAppUrl,
   fetchUpcomingAppointments,
   parseBirthdateInput,
   resolveByListOrDigit,
-  resolveSiteUrl,
   sendAndLog,
   updateConversationState,
   type AppointmentCandidate,
@@ -237,7 +237,7 @@ async function finishReschedule(
     return;
   }
 
-  const url = `${resolveSiteUrl()}/agendar/${link.id}`;
+  const url = buildAppUrl(`/agendar/${link.id}`);
   const body = texts.rescheduleLinkText(appointment.patient_name, url);
   await sendAndLog(supabase, guardianId, "bot_reschedule_link", body, () =>
     sendTextMessage({ to: guardianPhone, body })

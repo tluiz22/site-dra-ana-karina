@@ -7,6 +7,19 @@ import { formatWhen } from "../formatDateTime";
 
 const DOCTOR_NAME = "Dra. Ana Karina Fernandes";
 
+// A Meta rejeita a mensagem inteira (erro 131009 "Parameter value is not
+// valid") se o título de uma linha de lista passar de 24 caracteres — já
+// aconteceu com "1. Instituto Andre Camurça" (26) e pode acontecer de novo
+// com nome de paciente comprido. Central pra nunca mais estourar o limite.
+const MAX_LIST_ROW_TITLE = 24;
+
+function listRowTitle(index: number, label: string): string {
+  const prefix = `${index + 1}. `;
+  const maxLabelLength = MAX_LIST_ROW_TITLE - prefix.length;
+  const truncated = label.length > maxLabelLength ? `${label.slice(0, maxLabelLength - 1)}…` : label;
+  return `${prefix}${truncated}`;
+}
+
 export const MENU_LIST_ID = {
   agendar: "menu_agendar",
   cancelar: "menu_cancelar",
@@ -36,10 +49,10 @@ export function menuSections(): ListSection[] {
   return [
     {
       rows: [
-        { id: MENU_LIST_ID.agendar, title: "1. Agendar consulta" },
-        { id: MENU_LIST_ID.cancelar, title: "2. Cancelar consulta" },
-        { id: MENU_LIST_ID.remarcar, title: "3. Remarcar consulta" },
-        { id: MENU_LIST_ID.informacoes, title: "4. Informações gerais" },
+        { id: MENU_LIST_ID.agendar, title: listRowTitle(0, "Agendar consulta") },
+        { id: MENU_LIST_ID.cancelar, title: listRowTitle(1, "Cancelar consulta") },
+        { id: MENU_LIST_ID.remarcar, title: listRowTitle(2, "Remarcar consulta") },
+        { id: MENU_LIST_ID.informacoes, title: listRowTitle(3, "Informações gerais") },
       ],
     },
   ];
@@ -57,10 +70,10 @@ export function infoMenuSections(): ListSection[] {
   return [
     {
       rows: [
-        { id: INFO_LIST_ID.valores, title: "1. Valores" },
-        { id: INFO_LIST_ID.convenios, title: "2. Convênios" },
-        { id: INFO_LIST_ID.endereco, title: "3. Endereço" },
-        { id: INFO_LIST_ID.secretaria, title: "4. Falar com secretária" },
+        { id: INFO_LIST_ID.valores, title: listRowTitle(0, "Valores") },
+        { id: INFO_LIST_ID.convenios, title: listRowTitle(1, "Convênios") },
+        { id: INFO_LIST_ID.endereco, title: listRowTitle(2, "Endereço") },
+        { id: INFO_LIST_ID.secretaria, title: listRowTitle(3, "Falar com secretária") },
       ],
     },
   ];
@@ -137,8 +150,8 @@ export function modalitySections(): ListSection[] {
   return [
     {
       rows: [
-        { id: MODALITY_LIST_ID.firstVisit, title: "1. Consulta" },
-        { id: MODALITY_LIST_ID.returnVisit, title: "2. Retorno" },
+        { id: MODALITY_LIST_ID.firstVisit, title: listRowTitle(0, "Consulta") },
+        { id: MODALITY_LIST_ID.returnVisit, title: listRowTitle(1, "Retorno") },
       ],
     },
   ];
@@ -158,7 +171,7 @@ export function locationSections(options: LocationOption[]): ListSection[] {
     {
       rows: options.map((opt, index) => ({
         id: `book_location_${opt.id}`,
-        title: `${index + 1}. ${opt.label}`,
+        title: listRowTitle(index, opt.label),
       })),
     },
   ];
@@ -182,9 +195,9 @@ export const PATIENT_NEW_LIST_ID = "book_patient_new";
 export function patientChoiceSections(candidates: PatientCandidate[]): ListSection[] {
   const rows = candidates.map((c, index) => ({
     id: `book_patient_${c.id}`,
-    title: `${index + 1}. ${c.full_name}`,
+    title: listRowTitle(index, c.full_name),
   }));
-  rows.push({ id: PATIENT_NEW_LIST_ID, title: `${candidates.length + 1}. Outra criança` });
+  rows.push({ id: PATIENT_NEW_LIST_ID, title: listRowTitle(candidates.length, "Outra criança") });
   return [{ rows }];
 }
 
@@ -252,7 +265,7 @@ export function appointmentListSections(candidates: AppointmentCandidate[], idPr
     {
       rows: candidates.map((c, index) => ({
         id: `${idPrefix}_${c.id}`,
-        title: `${index + 1}. ${c.patient_name}`,
+        title: listRowTitle(index, c.patient_name),
         description: formatWhen(new Date(c.scheduled_at)),
       })),
     },

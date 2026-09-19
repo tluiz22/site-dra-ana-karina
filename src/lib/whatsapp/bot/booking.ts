@@ -9,11 +9,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
 import {
+  buildAppUrl,
   formatBirthdateLabel,
   matchesOption,
   parseBirthdateInput,
   resolveByListOrDigit,
-  resolveSiteUrl,
   sendAndLog,
   updateConversationState,
   type Selection,
@@ -526,7 +526,7 @@ async function finishBookingWithPatient(
     return;
   }
 
-  const url = `${resolveSiteUrl()}/agendar/${link.id}`;
+  const url = buildAppUrl(`/agendar/${link.id}`);
   const body = texts.bookingLinkText(patientName, url);
   await sendAndLog(supabase, guardianId, "bot_booking_link", body, () =>
     sendTextMessage({ to: guardianPhone, body })

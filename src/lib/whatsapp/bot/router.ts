@@ -53,6 +53,13 @@ export async function routeIncomingMessage(
     return;
   }
 
+  console.log(
+    "[whatsapp bot] estado lido:",
+    guardianPhone,
+    "state=" + convo.state,
+    "atendimento_humano=" + convo.atendimento_humano
+  );
+
   // Secretária conduzindo a conversa pelo app (coexistência) — o bot fica em
   // silêncio; a mensagem já foi registrada pelo webhook antes desta chamada.
   if (convo.atendimento_humano) return;

@@ -5,7 +5,26 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // "5584981880777" (formato da Meta) → "+5584981880777".
 export function toE164(waFrom: string | undefined): string | null {
-  return waFrom && /^\d{10,15}$/.test(waFrom) ? `+${waFrom}` : null;
+  if (!waFrom || !/^\d{10,15}$/.test(waFrom)) return null;
+  return `+${normalizeBrazilianMobileDigits(waFrom)}`;
+}
+
+// A Meta às vezes reporta o `wa_id`/`from` de um número brasileiro sem o "9"
+// extra que celulares têm (herança da transição de 8 para 9 dígitos no
+// Brasil, ainda inconsistente em alguns clientes do WhatsApp) — ex.:
+// "556198645490" (12 dígitos: 55 + DDD + 8) em vez de "5561998645490" (13:
+// 55 + DDD + 9 + 8). Sem normalizar, o mesmo número vira duas linhas
+// diferentes em `conversation_state`/`guardians` dependendo de quem manda o
+// webhook — foi exatamente esse bug que fez os resets de teste da Fase 3b
+// nunca "colarem" na conversa real. Assume-se celular (não fixo) porque só
+// o app do WhatsApp gera mensagens inbound.
+function normalizeBrazilianMobileDigits(digits: string): string {
+  if (digits.startsWith("55") && digits.length === 12) {
+    const ddd = digits.slice(2, 4);
+    const local = digits.slice(4);
+    return `55${ddd}9${local}`;
+  }
+  return digits;
 }
 
 export async function resolveGuardianId(
@@ -53,6 +72,18 @@ export function resolveSiteUrl(): string {
   if (vercelUrl) return `https://${vercelUrl}`;
 
   return "http://localhost:4321";
+}
+
+// Monta uma URL pública do site (link de agendar/remarcar enviado por
+// WhatsApp) a partir de `resolveSiteUrl()`. Tolera o caso de teste em que
+// `SITE_URL` já vem com query string (ex.: `?x-vercel-protection-bypass=...`,
+// usado para destravar um preview protegido pela Vercel durante a Fase 3b) —
+// nesse caso o path entra antes da query, não depois.
+export function buildAppUrl(path: string): string {
+  const base = resolveSiteUrl();
+  const [origin, existingQuery] = base.split("?");
+  const url = `${origin}${path}`;
+  return existingQuery ? `${url}?${existingQuery}` : url;
 }
 
 // --- resposta do usuário (toque em lista ou texto digitado) ---------------
@@ -116,7 +147,7 @@ export async function updateConversationState(
 ): Promise<void> {
   const { error } = await supabase
     .from("conversation_state")
-    .update({ state, ...extra })
+    .update({ state, updated_at: new Date().toISOString(), ...extra })
     .eq("guardian_phone", guardianPhone);
   if (error) {
     console.error("[whatsapp bot] erro ao atualizar conversation_state:", error.message);
