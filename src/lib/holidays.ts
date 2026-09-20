@@ -1,8 +1,9 @@
 // Feriados nacionais do Brasil — usado para nunca oferecer data de feriado
 // na agenda (nem nas sugestões automáticas, nem numa data escolhida
-// manualmente). Cobre só feriados nacionais fixados em lei federal:
-// Carnaval e Corpus Christi ficam de fora de propósito, pois são "pontos
-// facultativos" nacionalmente, não feriados obrigatórios (ver plano).
+// manualmente). Além dos feriados fixados em lei federal, inclui também
+// Carnaval (segunda e terça) e Corpus Christi por pedido do cliente — não
+// são feriados nacionais obrigatórios por lei ("ponto facultativo"), mas na
+// prática a clínica também não atende nesses dias.
 
 const FIXED_HOLIDAYS: ReadonlyArray<readonly [month: number, day: number]> = [
   [1, 1], // Confraternização Universal
@@ -17,8 +18,8 @@ const FIXED_HOLIDAYS: ReadonlyArray<readonly [month: number, day: number]> = [
 ];
 
 // Domingo de Páscoa pelo algoritmo de Meeus/Jones/Butcher (calendário
-// gregoriano) — usado para achar a Sexta-feira Santa, único feriado móvel
-// que é nacional por lei (Carnaval e Corpus Christi não são).
+// gregoriano) — usado para achar Sexta-feira Santa, Carnaval e Corpus
+// Christi, todos calculados a partir dele.
 function easterSunday(year: number): { month: number; day: number } {
   const a = year % 19;
   const b = Math.floor(year / 100);
@@ -43,6 +44,14 @@ function shiftMonthDay(year: number, month: number, day: number, deltaDays: numb
   return { month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 
+// Deslocamentos em relação ao Domingo de Páscoa (dias negativos = antes).
+const EASTER_OFFSET_HOLIDAYS: ReadonlyArray<number> = [
+  -48, // Segunda-feira de Carnaval
+  -47, // Terça-feira de Carnaval
+  -2, // Sexta-feira Santa
+  60, // Corpus Christi
+];
+
 // `isoDate` no formato "yyyy-mm-dd" (mesmo usado no resto do módulo de
 // agendamento — sem hora/fuso, é uma data corrida, não um instante).
 export function isNationalHoliday(isoDate: string): boolean {
@@ -54,6 +63,8 @@ export function isNationalHoliday(isoDate: string): boolean {
   if (FIXED_HOLIDAYS.some(([m, d]) => m === month && d === day)) return true;
 
   const easter = easterSunday(year);
-  const goodFriday = shiftMonthDay(year, easter.month, easter.day, -2);
-  return goodFriday.month === month && goodFriday.day === day;
+  return EASTER_OFFSET_HOLIDAYS.some((offset) => {
+    const { month: m, day: d } = shiftMonthDay(year, easter.month, easter.day, offset);
+    return m === month && d === day;
+  });
 }
