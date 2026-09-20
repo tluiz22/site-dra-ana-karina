@@ -2,10 +2,11 @@
 //
 // Chamado pelo webhook (`src/pages/api/whatsapp/webhook.ts`) para cada
 // mensagem inbound do paciente, depois que ela já foi registrada em
-// `whatsapp_messages`. Cobre WELCOME → MENU → INFO_MENU → HUMAN_HANDOFF
-// (case 4 · Informações Gerais, completo) e delega os estados de Agendar
-// (case 1, `./booking.ts`), Cancelar (case 2, `./cancel.ts`) e Remarcar
-// (case 3, `./reschedule.ts`) — os quatro cases do menu principal completos.
+// `whatsapp_messages`. Cobre WELCOME → MENU → INFO_MENU e MENU → HUMAN_HANDOFF
+// ("Falar com secretária" é opção do menu principal, não do submenu de
+// Informações — pedido do cliente) e delega os estados de Agendar (case 1,
+// `./booking.ts`), Cancelar (case 2, `./cancel.ts`) e Remarcar (case 3,
+// `./reschedule.ts`) — os quatro cases do menu principal completos.
 //
 // Nunca lança: erros de uma etapa não devem impedir o webhook de responder
 // 200 rápido para a Meta.
@@ -16,6 +17,7 @@ import { sendInteractiveListMessage, sendTextMessage } from "../client";
 import {
   extractSelection,
   isBackToMenuSelection,
+  isPastHumanHandoffDeadline,
   matchesOption,
   resolveGuardianId,
   sendAndLog,
@@ -32,6 +34,7 @@ interface ConversationStateRow {
   guardian_id: string | null;
   atendimento_humano: boolean;
   context: Record<string, unknown> | null;
+  updated_at: string;
 }
 
 export async function routeIncomingMessage(
@@ -41,7 +44,7 @@ export async function routeIncomingMessage(
 ): Promise<void> {
   const { data: convo, error } = await supabase
     .from("conversation_state")
-    .select("state, guardian_id, atendimento_humano, context")
+    .select("state, guardian_id, atendimento_humano, context, updated_at")
     .eq("guardian_phone", guardianPhone)
     .maybeSingle<ConversationStateRow>();
 
@@ -62,8 +65,20 @@ export async function routeIncomingMessage(
   );
 
   // Secretária conduzindo a conversa pelo app (coexistência) — o bot fica em
-  // silêncio; a mensagem já foi registrada pelo webhook antes desta chamada.
-  if (convo.atendimento_humano) return;
+  // silêncio, a menos que o prazo de resposta já tenha vencido (24h corridas,
+  // nunca vencendo num fim de semana — "até o próximo dia útil"). Nesse caso,
+  // devolve ao bot sozinho, sem depender da secretária lembrar de digitar
+  // `#bot`, e reinicia do zero (WELCOME) — o responsável pode não lembrar
+  // mais em que ponto a conversa parou depois de tanto tempo.
+  if (convo.atendimento_humano) {
+    if (!isPastHumanHandoffDeadline(new Date(convo.updated_at))) return;
+    await updateConversationState(supabase, guardianPhone, "WELCOME", {
+      atendimento_humano: false,
+      context: {},
+    });
+    convo.state = "WELCOME";
+    convo.atendimento_humano = false;
+  }
 
   const guardianId = convo.guardian_id ?? (await resolveGuardianId(supabase, guardianPhone));
   const selection = extractSelection(waMsg);
@@ -191,6 +206,15 @@ async function handleMenu(
     return;
   }
 
+  if (matchesOption(selection, "5", texts.MENU_LIST_ID.secretaria)) {
+    const body = texts.handoffText();
+    await sendAndLog(supabase, guardianId, "bot_handoff", body, () =>
+      sendTextMessage({ to: guardianPhone, body })
+    );
+    await updateConversationState(supabase, guardianPhone, "HUMAN_HANDOFF", { atendimento_humano: true });
+    return;
+  }
+
   const notUnderstood = texts.notUnderstoodText();
   await sendAndLog(supabase, guardianId, "bot_not_understood", notUnderstood, () =>
     sendTextMessage({ to: guardianPhone, body: notUnderstood })
@@ -239,15 +263,6 @@ async function handleInfoMenu(
       sendTextMessage({ to: guardianPhone, body })
     );
     await sendInfoMenu(supabase, guardianPhone, guardianId);
-    return;
-  }
-
-  if (matchesOption(selection, "4", texts.INFO_LIST_ID.secretaria)) {
-    const body = texts.handoffText();
-    await sendAndLog(supabase, guardianId, "bot_handoff", body, () =>
-      sendTextMessage({ to: guardianPhone, body })
-    );
-    await updateConversationState(supabase, guardianPhone, "HUMAN_HANDOFF", { atendimento_humano: true });
     return;
   }
 

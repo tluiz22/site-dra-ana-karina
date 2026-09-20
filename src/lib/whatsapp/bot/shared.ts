@@ -2,6 +2,7 @@
 // e os módulos da máquina de estados (`./router.ts`, `./booking.ts`, ...).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { TIMEZONE } from "../formatDateTime";
 
 // "5584981880777" (formato da Meta) → "+5584981880777".
 export function toE164(waFrom: string | undefined): string | null {
@@ -55,6 +56,19 @@ export async function returnControlToBot(
   if (error) {
     console.error("[whatsapp bot] erro ao devolver conversa ao bot:", error.message);
   }
+}
+
+// Prazo do transbordo para a secretária: 24h corridas, mas nunca vencendo
+// num fim de semana — se cair no sábado ou domingo, empurra pra segunda no
+// mesmo horário. Não considera feriados (fora de escopo por ora). Passado o
+// prazo, a próxima mensagem do responsável devolve a conversa ao bot
+// automaticamente, sem depender da secretária lembrar de digitar `#bot`.
+export function isPastHumanHandoffDeadline(handoffAt: Date, now: Date = new Date()): boolean {
+  const deadline = new Date(handoffAt.getTime() + 24 * 60 * 60 * 1000);
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, weekday: "short" }).format(deadline);
+  if (weekday === "Sat") deadline.setDate(deadline.getDate() + 2);
+  else if (weekday === "Sun") deadline.setDate(deadline.getDate() + 1);
+  return now.getTime() >= deadline.getTime();
 }
 
 // Base pública do site, para montar o link de `/agendar/[token]` enviado

@@ -2,7 +2,7 @@
 // entre as notificações (Fase 3a) e o bot (Fase 3b), para manter o mesmo
 // formato em toda mensagem que o paciente recebe.
 
-const TIMEZONE = "America/Fortaleza";
+export const TIMEZONE = "America/Fortaleza";
 
 // "21/08/2026 às 14h00" (fuso do consultório, não do servidor).
 export function formatWhen(date: Date): string {

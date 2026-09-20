@@ -27,13 +27,13 @@ export const MENU_LIST_ID = {
   cancelar: "menu_cancelar",
   remarcar: "menu_remarcar",
   informacoes: "menu_informacoes",
+  secretaria: "menu_secretaria",
 } as const;
 
 export const INFO_LIST_ID = {
   valores: "info_valores",
   convenios: "info_convenios",
   endereco: "info_endereco",
-  secretaria: "info_secretaria",
 } as const;
 
 // Decisão de negócio #1 do plano: o aviso de atendimento particular vem
@@ -55,6 +55,7 @@ export function menuSections(): ListSection[] {
         { id: MENU_LIST_ID.cancelar, title: listRowTitle(1, "Cancelar consulta") },
         { id: MENU_LIST_ID.remarcar, title: listRowTitle(2, "Remarcar consulta") },
         { id: MENU_LIST_ID.informacoes, title: listRowTitle(3, "Informações gerais") },
+        { id: MENU_LIST_ID.secretaria, title: listRowTitle(4, "Falar com secretária") },
       ],
     },
   ];
@@ -75,8 +76,7 @@ export function infoMenuSections(): ListSection[] {
         { id: INFO_LIST_ID.valores, title: listRowTitle(0, "Valores") },
         { id: INFO_LIST_ID.convenios, title: listRowTitle(1, "Convênios") },
         { id: INFO_LIST_ID.endereco, title: listRowTitle(2, "Endereço") },
-        { id: INFO_LIST_ID.secretaria, title: listRowTitle(3, "Falar com secretária") },
-        { id: BACK_TO_MENU_LIST_ID, title: listRowTitle(4, "Voltar ao menu") },
+        { id: BACK_TO_MENU_LIST_ID, title: listRowTitle(3, "Voltar ao menu") },
       ],
     },
   ];
@@ -92,7 +92,7 @@ interface ClinicLocationRow {
 // que o pagamento é 100% presencial, sem sinal antecipado.
 export function valoresText(locations: ClinicLocationRow[]): string {
   if (locations.length === 0) {
-    return "No momento não temos valores cadastrados por aqui — escolha [4] Falar com a secretária para confirmar.";
+    return "No momento não temos valores cadastrados por aqui — escolha [5] Falar com a secretária para confirmar.";
   }
 
   const linhas = locations.map((loc) => {
@@ -132,7 +132,7 @@ export function enderecoText(clinicLocations: ClinicAddressRow[]): string {
   );
 
   if (withAddress.length === 0) {
-    return "O endereço do consultório ainda não está cadastrado por aqui — escolha [4] Falar com a secretária para confirmar.";
+    return "O endereço do consultório ainda não está cadastrado por aqui — escolha [5] Falar com a secretária para confirmar.";
   }
 
   const linhas = withAddress.map((loc) => {
@@ -196,7 +196,7 @@ export function locationSections(options: LocationOption[]): ListSection[] {
 }
 
 export function noLocationAvailableText(): string {
-  return "No momento não temos nenhum local de atendimento configurado — escolha [4] Falar com a secretária no menu principal.";
+  return "No momento não temos nenhum local de atendimento configurado — escolha [5] Falar com a secretária no menu principal.";
 }
 
 interface PatientCandidate {
@@ -273,7 +273,7 @@ export function bookingLinkText(patientName: string, url: string): string {
 }
 
 export function bookingLinkErrorText(): string {
-  return "Tivemos um problema para gerar o link de agendamento. Por favor, escolha [4] Falar com a secretária no menu principal.";
+  return "Tivemos um problema para gerar o link de agendamento. Por favor, escolha [5] Falar com a secretária no menu principal.";
 }
 
 // --- identificação de consulta futura (compartilhada pelos cases 2 e 3) --
@@ -304,21 +304,21 @@ export function appointmentListSections(candidates: AppointmentCandidate[], idPr
 }
 
 export function noMatchingAppointmentText(): string {
-  return "Não encontramos consulta futura para essa data de nascimento. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+  return "Não encontramos consulta futura para essa data de nascimento. Escolha [5] Falar com a secretária no menu principal se precisar de ajuda.";
 }
 
 export function couldNotIdentifyAppointmentText(): string {
-  return "Não conseguimos confirmar qual consulta é. Escolha [4] Falar com a secretária no menu principal.";
+  return "Não conseguimos confirmar qual consulta é. Escolha [5] Falar com a secretária no menu principal.";
 }
 
 // --- case 3 · Remarcar --------------------------------------------------
 
 export function rescheduleNoGuardianText(): string {
-  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
+  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [5] Falar com a secretária no menu principal.";
 }
 
 export function rescheduleNoAppointmentsText(): string {
-  return "Não encontramos nenhuma consulta futura para remarcar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+  return "Não encontramos nenhuma consulta futura para remarcar neste número. Escolha [5] Falar com a secretária no menu principal se precisar de ajuda.";
 }
 
 export function confirmAppointmentText(patientName: string, whenLabel: string): string {
@@ -333,17 +333,17 @@ export function rescheduleLinkText(patientName: string, url: string): string {
 }
 
 export function rescheduleLinkErrorText(): string {
-  return "Tivemos um problema para gerar o link de remarcação. Por favor, escolha [4] Falar com a secretária no menu principal.";
+  return "Tivemos um problema para gerar o link de remarcação. Por favor, escolha [5] Falar com a secretária no menu principal.";
 }
 
 // --- case 2 · Cancelar ----------------------------------------------------
 
 export function cancelNoGuardianText(): string {
-  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
+  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [5] Falar com a secretária no menu principal.";
 }
 
 export function cancelNoAppointmentsText(): string {
-  return "Não encontramos nenhuma consulta futura para cancelar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+  return "Não encontramos nenhuma consulta futura para cancelar neste número. Escolha [5] Falar com a secretária no menu principal se precisar de ajuda.";
 }
 
 export function confirmCancelText(patientName: string, whenLabel: string): string {
@@ -362,5 +362,5 @@ export function cancelSuccessText(patientName: string, whenLabel: string): strin
 }
 
 export function cancelErrorText(): string {
-  return "Tivemos um problema para cancelar a consulta. Por favor, escolha [4] Falar com a secretária no menu principal.";
+  return "Tivemos um problema para cancelar a consulta. Por favor, escolha [5] Falar com a secretária no menu principal.";
 }
