@@ -7,7 +7,7 @@ const supabase = createClient(Astro.request, Astro.cookies);
 
 const { data: clinicLocations } = await supabase
   .from("clinic_locations")
-  .select("id, name, type")
+  .select("id, name")
   .eq("is_active", true)
   .order("type");
 
@@ -73,9 +73,7 @@ const slots = clinicLocationId
         >
           {
             clinicLocations?.map((location) => (
-              <option value={location.id} selected={location.id === clinicLocationId}>
-                {location.type === "clinic" ? "Consultório" : "Atendimento domiciliar"} — {location.name}
-              </option>
+              <option value={location.id} selected={location.id === clinicLocationId}>{location.name}</option>
             ))
           }
         </select>

@@ -6,7 +6,7 @@ const supabase = createClient(Astro.request, Astro.cookies);
 
 const { data: clinicLocations } = await supabase
   .from("clinic_locations")
-  .select("id, name, type, price_first_visit_cents")
+  .select("id, name, price_first_visit_cents")
   .eq("is_active", true)
   .order("type");
 
@@ -119,10 +119,7 @@ const errorMessage = errorParam ? errorMessages[errorParam] ?? errorMessages["1"
         >
           {
             clinicLocations?.map((location) => (
-              <option value={location.id}>
-                {location.type === "clinic" ? "Consultório" : "Atendimento domiciliar"} —{" "}
-                {location.name}
-              </option>
+              <option value={location.id}>{location.name}</option>
             ))
           }
         </select>
@@ -245,9 +242,7 @@ const errorMessage = errorParam ? errorMessages[errorParam] ?? errorMessages["1"
             action={`/api/admin/configuracoes/clinic-locations/${location.id}/price`}
             class="flex flex-wrap items-end gap-3 rounded-md border border-slate-200 bg-white p-4"
           >
-            <div class="min-w-[10rem] text-sm font-medium text-slate-700">
-              {location.type === "clinic" ? "Consultório" : "Atendimento domiciliar"} — {location.name}
-            </div>
+            <div class="min-w-[10rem] text-sm font-medium text-slate-700">{location.name}</div>
             <div>
               <label for={`price_first_visit_${location.id}`} class="block text-sm font-medium text-slate-700">
                 Consulta (R$)

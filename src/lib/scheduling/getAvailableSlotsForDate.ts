@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { queryFreeBusy } from "../google/calendar";
+import { isNationalHoliday } from "../holidays";
 import { computeAvailableSlots, type AppointmentType, type AvailableSlot } from "./slots";
 
 export type { AppointmentType };
@@ -15,6 +16,10 @@ export async function getAvailableSlotsForDate({
   date: string;
   appointmentType: AppointmentType;
 }): Promise<AvailableSlot[]> {
+  // Nunca oferece horário em feriado nacional — nem sugerido, nem escolhido
+  // manualmente (ex.: admin tentando marcar direto numa data de feriado).
+  if (isNationalHoliday(date)) return [];
+
   const weekday = new Date(`${date}T00:00:00-03:00`).getUTCDay();
 
   const [{ data: windows }, { data: settings }] = await Promise.all([

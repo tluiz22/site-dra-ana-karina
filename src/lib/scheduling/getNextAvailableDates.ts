@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { queryFreeBusy } from "../google/calendar";
+import { isNationalHoliday } from "../holidays";
 import { computeAvailableSlots, type AppointmentType, type AvailabilityWindow } from "./slots";
 
 export interface AvailableDate {
@@ -72,7 +73,7 @@ export async function getNextAvailableDates({
     const weekday = new Date(`${date}T00:00:00-03:00`).getUTCDay();
     const windowsForDay = windowsByWeekday.get(weekday);
 
-    if (windowsForDay) {
+    if (windowsForDay && !isNationalHoliday(date)) {
       const slots = computeAvailableSlots({
         date,
         windows: windowsForDay,
