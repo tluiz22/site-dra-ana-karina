@@ -236,7 +236,7 @@ async function handleMenu(
     return;
   }
 
-  const notUnderstood = texts.notUnderstoodText();
+  const notUnderstood = texts.notUnderstoodText(true);
   await sendAndLog(supabase, guardianId, "bot_not_understood", notUnderstood, () =>
     sendTextMessage({ to: guardianPhone, body: notUnderstood })
   );

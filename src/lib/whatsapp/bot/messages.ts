@@ -63,7 +63,12 @@ export function menuSections(): ListSection[] {
   ];
 }
 
-export function notUnderstoodText(): string {
+// `isMainMenu` omite a dica "digite 0 para voltar ao menu principal" —
+// não faz sentido oferecer para quem já está no menu principal (só
+// `handleMenu()` em router.ts passa `true`; os demais pontos de chamada,
+// dentro de sub-fluxos, continuam mostrando a dica normalmente).
+export function notUnderstoodText(isMainMenu?: boolean): string {
+  if (isMainMenu) return "Não entendi sua resposta 🙏 Escolha uma das opções abaixo.";
   return "Não entendi sua resposta 🙏 Escolha uma das opções abaixo (ou digite 0 para voltar ao menu principal).";
 }
 
