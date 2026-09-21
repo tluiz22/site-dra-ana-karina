@@ -276,6 +276,13 @@ export function bookingLinkErrorText(): string {
   return "Tivemos um problema para gerar o link de agendamento. Por favor, escolha [5] Falar com a secretária no menu principal.";
 }
 
+export function patientAlreadyScheduledText(patientName: string, whenLabel: string): string {
+  return (
+    `*${patientName}* já tem uma consulta marcada para ${whenLabel}. ` +
+    "Se quiser mudar o dia ou horário, escolha [3] Remarcar consulta no menu principal."
+  );
+}
+
 // --- identificação de consulta futura (compartilhada pelos cases 2 e 3) --
 //
 // Mesmo princípio anti-convênio do case 1 · Agendar: nunca listar às cegas

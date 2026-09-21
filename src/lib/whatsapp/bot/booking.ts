@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
+import { formatWhen } from "../formatDateTime";
 import {
   buildAppUrl,
   formatBirthdateLabel,
@@ -585,6 +586,34 @@ async function finishBookingWithPatient(
   if (!guardianId || !context.clinic_location_id || !context.appointment_type) {
     console.error("[whatsapp bot] contexto de agendamento incompleto ao gerar o link:", context);
     await sendBookingLinkError(supabase, guardianPhone, guardianId);
+    return;
+  }
+
+  // Evita gerar um link que só falharia depois, na confirmação da página
+  // (mesma trava já usada lá em `/agendar/[token]/confirmar` e no admin) —
+  // pode acontecer ao escolher, pela busca de data de nascimento, uma
+  // criança que já tem consulta futura marcada (achado em teste real: a
+  // lista de "outra criança" não é filtrada por consulta futura, diferente
+  // da lista inicial de até 3 candidatos).
+  const { data: existingAppointment } = await supabase
+    .from("appointments")
+    .select("scheduled_at")
+    .eq("patient_id", patientId)
+    .in("status", ["scheduled", "confirmed"])
+    .gt("scheduled_at", new Date().toISOString())
+    .order("scheduled_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingAppointment) {
+    const body = texts.patientAlreadyScheduledText(
+      patientName,
+      formatWhen(new Date(existingAppointment.scheduled_at))
+    );
+    await sendAndLog(supabase, guardianId, "bot_book_already_scheduled", body, () =>
+      sendTextMessage({ to: guardianPhone, body })
+    );
+    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
     return;
   }
 
