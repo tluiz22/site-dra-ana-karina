@@ -71,6 +71,20 @@ export function isPastHumanHandoffDeadline(handoffAt: Date, now: Date = new Date
   return now.getTime() >= deadline.getTime();
 }
 
+// Timeout de inatividade: sem cron dedicado (o único Vercel Cron do projeto
+// roda 1x/dia, para o lembrete de consulta), o reset é lazy, no mesmo padrão
+// do prazo de transbordo acima — só é avaliado quando uma nova mensagem
+// chega. Se a conversa ficou parada num estado intermediário (fora de
+// WELCOME/MENU, que não têm sub-fluxo/contexto a perder) por mais que esse
+// tempo, reinicia do zero em vez de tentar reencaixar a mensagem num
+// contexto que o responsável provavelmente já esqueceu. Valor fácil de
+// ajustar.
+export const IDLE_TIMEOUT_MINUTES = 15;
+
+export function isPastIdleTimeout(lastUpdatedAt: Date, now: Date = new Date()): boolean {
+  return now.getTime() - lastUpdatedAt.getTime() >= IDLE_TIMEOUT_MINUTES * 60 * 1000;
+}
+
 // Base pública do site, para montar o link de `/agendar/[token]` enviado
 // pelo bot. Mesma lógica de fallback do `astro.config.mjs` (site institucional
 // em produção, preview da Vercel, ou localhost em dev) — só que resolvida em

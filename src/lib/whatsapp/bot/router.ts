@@ -18,6 +18,7 @@ import {
   extractSelection,
   isBackToMenuSelection,
   isPastHumanHandoffDeadline,
+  isPastIdleTimeout,
   matchesOption,
   resolveGuardianId,
   sendAndLog,
@@ -82,6 +83,21 @@ export async function routeIncomingMessage(
 
   const guardianId = convo.guardian_id ?? (await resolveGuardianId(supabase, guardianPhone));
   const selection = extractSelection(waMsg);
+
+  // Timeout de inatividade (15min, ver `isPastIdleTimeout`): a conversa
+  // estava num sub-fluxo (fora de WELCOME/MENU) e ficou parada tempo demais
+  // — reinicia do zero em vez de tentar reencaixar esta mensagem num
+  // contexto que o responsável provavelmente já esqueceu.
+  if (
+    convo.state !== "WELCOME" &&
+    convo.state !== "MENU" &&
+    isPastIdleTimeout(new Date(convo.updated_at))
+  ) {
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
+    convo.state = "WELCOME";
+    convo.context = {};
+  }
+
   const context = convo.context ?? {};
 
   // "Voltar ao menu principal" funciona em qualquer estado do meio da
