@@ -1,5 +1,8 @@
-// Case 1 · Agendar (Fase 3b) — estados BOOK_MODALITY, BOOK_LOCATION,
-// BOOK_PATIENT_SELECT e BOOK_PATIENT_NEW da máquina de estados do bot.
+// Case 1 · Agendar (Fase 3b) — estados BOOK_LOCATION, BOOK_PATIENT_SELECT e
+// BOOK_PATIENT_NEW da máquina de estados do bot. A modalidade (consulta ou
+// retorno) não é mais perguntada aqui — "Agendar consulta" e "Agendar
+// retorno" são opções separadas do menu principal (ver router.ts), que já
+// chamam `startBooking` com o `appointmentType` decidido.
 //
 // Ao final (criança identificada ou cadastrada), gera uma linha em
 // `booking_links` e envia o link de `/agendar/[token]` — a escolha de
@@ -12,7 +15,6 @@ import { formatWhen } from "../formatDateTime";
 import {
   buildAppUrl,
   formatBirthdateLabel,
-  matchesOption,
   parseBirthdateInput,
   resolveByListOrDigit,
   sendAndLog,
@@ -22,7 +24,6 @@ import {
 import * as texts from "./messages";
 
 export const BOOKING_STATES: ReadonlySet<string> = new Set([
-  "BOOK_MODALITY",
   "BOOK_LOCATION",
   "BOOK_PATIENT_SELECT",
   "BOOK_PATIENT_NEW",
@@ -71,79 +72,15 @@ interface BookingContext {
   birthdate_search_reason?: "duplicate_check";
 }
 
-// MENU opção 1 → primeira pergunta do fluxo (modalidade).
+// MENU opção 1 ("Agendar consulta") ou 2 ("Agendar retorno") → busca os
+// locais de atendimento e já pergunta o local (a modalidade vem escolhida
+// do próprio menu principal, não é mais perguntada aqui).
 export async function startBooking(
   supabase: SupabaseClient,
   guardianPhone: string,
-  guardianId: string | null
-): Promise<void> {
-  await sendModalityQuestion(supabase, guardianPhone, guardianId);
-  await updateConversationState(supabase, guardianPhone, "BOOK_MODALITY", { context: {} });
-}
-
-export async function handleBookingState(
-  supabase: SupabaseClient,
-  guardianPhone: string,
   guardianId: string | null,
-  state: string,
-  rawContext: Record<string, unknown>,
-  selection: Selection
+  appointmentType: "first_visit" | "return_visit"
 ): Promise<void> {
-  const context = rawContext as BookingContext;
-
-  switch (state) {
-    case "BOOK_MODALITY":
-      await handleModality(supabase, guardianPhone, guardianId, selection);
-      return;
-    case "BOOK_LOCATION":
-      await handleLocation(supabase, guardianPhone, guardianId, context, selection);
-      return;
-    case "BOOK_PATIENT_SELECT":
-      await handlePatientSelect(supabase, guardianPhone, guardianId, context, selection);
-      return;
-    case "BOOK_PATIENT_NEW":
-      await handlePatientNew(supabase, guardianPhone, guardianId, context, selection);
-      return;
-  }
-}
-
-// --- BOOK_MODALITY ------------------------------------------------------
-
-async function sendModalityQuestion(
-  supabase: SupabaseClient,
-  guardianPhone: string,
-  guardianId: string | null
-): Promise<void> {
-  const body = texts.modalityBodyText();
-  await sendAndLog(supabase, guardianId, "bot_book_modality", body, () =>
-    sendInteractiveListMessage({
-      to: guardianPhone,
-      bodyText: body,
-      buttonText: "Escolher opção",
-      sections: texts.modalitySections(),
-    })
-  );
-}
-
-async function handleModality(
-  supabase: SupabaseClient,
-  guardianPhone: string,
-  guardianId: string | null,
-  selection: Selection
-): Promise<void> {
-  let appointmentType: "first_visit" | "return_visit" | null = null;
-  if (matchesOption(selection, "1", texts.MODALITY_LIST_ID.firstVisit)) appointmentType = "first_visit";
-  else if (matchesOption(selection, "2", texts.MODALITY_LIST_ID.returnVisit)) appointmentType = "return_visit";
-
-  if (!appointmentType) {
-    const body = texts.notUnderstoodText();
-    await sendAndLog(supabase, guardianId, "bot_not_understood", body, () =>
-      sendTextMessage({ to: guardianPhone, body })
-    );
-    await sendModalityQuestion(supabase, guardianPhone, guardianId);
-    return;
-  }
-
   const { data: locationRows } = await supabase
     .from("clinic_locations")
     .select("id, name, type")
@@ -167,6 +104,29 @@ async function handleModality(
   await sendLocationQuestion(supabase, guardianPhone, guardianId, options);
   const context: BookingContext = { appointment_type: appointmentType, location_options: options };
   await updateConversationState(supabase, guardianPhone, "BOOK_LOCATION", { context });
+}
+
+export async function handleBookingState(
+  supabase: SupabaseClient,
+  guardianPhone: string,
+  guardianId: string | null,
+  state: string,
+  rawContext: Record<string, unknown>,
+  selection: Selection
+): Promise<void> {
+  const context = rawContext as BookingContext;
+
+  switch (state) {
+    case "BOOK_LOCATION":
+      await handleLocation(supabase, guardianPhone, guardianId, context, selection);
+      return;
+    case "BOOK_PATIENT_SELECT":
+      await handlePatientSelect(supabase, guardianPhone, guardianId, context, selection);
+      return;
+    case "BOOK_PATIENT_NEW":
+      await handlePatientNew(supabase, guardianPhone, guardianId, context, selection);
+      return;
+  }
 }
 
 // --- BOOK_LOCATION ------------------------------------------------------

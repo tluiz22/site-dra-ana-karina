@@ -201,28 +201,33 @@ async function handleMenu(
   guardianId: string | null,
   selection: Selection
 ): Promise<void> {
-  if (matchesOption(selection, "1", texts.MENU_LIST_ID.agendar)) {
-    await startBooking(supabase, guardianPhone, guardianId);
+  if (matchesOption(selection, "1", texts.MENU_LIST_ID.agendarConsulta)) {
+    await startBooking(supabase, guardianPhone, guardianId, "first_visit");
     return;
   }
 
-  if (matchesOption(selection, "2", texts.MENU_LIST_ID.cancelar)) {
+  if (matchesOption(selection, "2", texts.MENU_LIST_ID.agendarRetorno)) {
+    await startBooking(supabase, guardianPhone, guardianId, "return_visit");
+    return;
+  }
+
+  if (matchesOption(selection, "3", texts.MENU_LIST_ID.cancelar)) {
     await startCancel(supabase, guardianPhone, guardianId);
     return;
   }
 
-  if (matchesOption(selection, "3", texts.MENU_LIST_ID.remarcar)) {
+  if (matchesOption(selection, "4", texts.MENU_LIST_ID.remarcar)) {
     await startReschedule(supabase, guardianPhone, guardianId);
     return;
   }
 
-  if (matchesOption(selection, "4", texts.MENU_LIST_ID.informacoes)) {
+  if (matchesOption(selection, "5", texts.MENU_LIST_ID.informacoes)) {
     await sendInfoMenu(supabase, guardianPhone, guardianId);
     await updateConversationState(supabase, guardianPhone, "INFO_MENU");
     return;
   }
 
-  if (matchesOption(selection, "5", texts.MENU_LIST_ID.secretaria)) {
+  if (matchesOption(selection, "6", texts.MENU_LIST_ID.secretaria)) {
     const body = texts.handoffText();
     await sendAndLog(supabase, guardianId, "bot_handoff", body, () =>
       sendTextMessage({ to: guardianPhone, body })
