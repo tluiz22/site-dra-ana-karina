@@ -231,10 +231,7 @@ export function askBirthdateText(): string {
 // duplicar o cadastro de uma criança já existente (sem consulta futura)
 // com o nome digitado de um jeito ligeiramente diferente.
 export function askBirthdateForDuplicateCheckText(): string {
-  return (
-    "Para não duplicar o cadastro, qual é a data de nascimento da criança? " +
-    "(formato dd/mm/aaaa)"
-  );
+  return "Informe a data de nascimento da criança (formato dd/mm/aaaa)";
 }
 
 export function birthdateMatchChoiceBodyText(): string {
