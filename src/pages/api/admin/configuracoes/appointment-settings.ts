@@ -12,7 +12,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const bufferMinutes = formData.get("buffer_minutes_between_appointments")?.toString();
 
   if (!defaultAppointmentDuration || !defaultReturnVisitDuration || !bufferMinutes) {
-    return redirect("/admin/configuracoes?error=1");
+    return redirect("/admin/configuracoes/duracao?error=1");
   }
 
   const supabase = createClient(request, cookies);
@@ -27,8 +27,8 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .eq("id", 1);
 
   if (error) {
-    return redirect("/admin/configuracoes?error=1");
+    return redirect("/admin/configuracoes/duracao?error=1");
   }
 
-  return redirect("/admin/configuracoes");
+  return redirect("/admin/configuracoes/duracao");
 };

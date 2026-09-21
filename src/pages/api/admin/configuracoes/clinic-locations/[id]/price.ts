@@ -12,7 +12,7 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   const firstVisitCents = priceFirstVisit ? Math.round(Number(priceFirstVisit) * 100) : NaN;
 
   if (!id || !Number.isFinite(firstVisitCents)) {
-    return redirect("/admin/configuracoes?error=1");
+    return redirect("/admin/configuracoes/valores?error=1");
   }
 
   const supabase = createClient(request, cookies);
@@ -22,8 +22,8 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
     .eq("id", id);
 
   if (error) {
-    return redirect("/admin/configuracoes?error=1");
+    return redirect("/admin/configuracoes/valores?error=1");
   }
 
-  return redirect("/admin/configuracoes");
+  return redirect("/admin/configuracoes/valores");
 };

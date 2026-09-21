@@ -1,0 +1,31 @@
+---
+interface Props {
+  current: "disponibilidade" | "duracao" | "valores" | "exames";
+}
+
+const { current } = Astro.props;
+
+const tabs = [
+  { id: "disponibilidade", label: "Disponibilidade", href: "/admin/configuracoes" },
+  { id: "duracao", label: "Duração e intervalo", href: "/admin/configuracoes/duracao" },
+  { id: "valores", label: "Valores", href: "/admin/configuracoes/valores" },
+  { id: "exames", label: "Tipos de exame", href: "/admin/configuracoes/exames" },
+] as const;
+---
+
+<nav class="mt-6 flex flex-wrap gap-x-6 border-b border-slate-200 text-sm font-medium">
+  {
+    tabs.map((tab) => (
+      <a
+        href={tab.href}
+        class={`-mb-px border-b-2 pb-2 ${
+          tab.id === current
+            ? "border-sky-700 text-sky-700"
+            : "border-transparent text-slate-600 hover:text-sky-700"
+        }`}
+      >
+        {tab.label}
+      </a>
+    ))
+  }
+</nav>

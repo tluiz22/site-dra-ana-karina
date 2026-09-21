@@ -1,0 +1,91 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import ConfiguracoesTabs from "../../../components/admin/ConfiguracoesTabs.astro";
+import { createClient } from "../../../lib/supabase/server";
+
+const supabase = createClient(Astro.request, Astro.cookies);
+
+const { data: settings } = await supabase
+  .from("appointment_settings")
+  .select("*")
+  .eq("id", 1)
+  .single();
+
+const errorParam = Astro.url.searchParams.get("error");
+const errorMessage = errorParam ? "Não foi possível salvar. Confira os dados e tente novamente." : null;
+---
+
+<AdminLayout title="Configurações">
+  <h1 class="text-2xl font-bold text-slate-900">Configurações</h1>
+  <p class="mt-2 text-slate-600">Parâmetros usados pela agenda e pelo bot de WhatsApp.</p>
+
+  <ConfiguracoesTabs current="duracao" />
+
+  {
+    errorMessage && (
+      <p class="mt-6 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+    )
+  }
+
+  <section class="mt-6">
+    <h2 class="text-lg font-semibold text-slate-900">Duração e intervalo</h2>
+    <p class="mt-1 text-sm text-slate-600">
+      Duração padrão de cada tipo de atendimento e o intervalo mínimo entre consultas.
+    </p>
+
+    <form
+      method="POST"
+      action="/api/admin/configuracoes/appointment-settings"
+      class="mt-4 flex flex-wrap items-end gap-3 rounded-md border border-slate-200 bg-white p-4"
+    >
+      <div>
+        <label for="default_appointment_duration_minutes" class="block text-sm font-medium text-slate-700">
+          Consulta (min)
+        </label>
+        <input
+          type="number"
+          min="1"
+          id="default_appointment_duration_minutes"
+          name="default_appointment_duration_minutes"
+          value={settings?.default_appointment_duration_minutes}
+          required
+          class="mt-1 w-28 rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label for="default_return_visit_duration_minutes" class="block text-sm font-medium text-slate-700">
+          Retorno (min)
+        </label>
+        <input
+          type="number"
+          min="1"
+          id="default_return_visit_duration_minutes"
+          name="default_return_visit_duration_minutes"
+          value={settings?.default_return_visit_duration_minutes}
+          required
+          class="mt-1 w-28 rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label for="buffer_minutes_between_appointments" class="block text-sm font-medium text-slate-700">
+          Intervalo entre consultas (min)
+        </label>
+        <input
+          type="number"
+          min="0"
+          id="buffer_minutes_between_appointments"
+          name="buffer_minutes_between_appointments"
+          value={settings?.buffer_minutes_between_appointments}
+          required
+          class="mt-1 w-28 rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <button
+        type="submit"
+        class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+      >
+        Salvar
+      </button>
+    </form>
+  </section>
+</AdminLayout>
