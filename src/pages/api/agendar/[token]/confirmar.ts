@@ -3,7 +3,11 @@ import { createServiceClient } from "../../../../lib/supabase/service";
 import { createEvent, rescheduleEvent } from "../../../../lib/google/calendar";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../../lib/scheduling/getAvailableSlotsForDate";
 import { resolveClinicLocationIds, type LocationCategory } from "../../../../lib/scheduling/resolveClinicLocationIds";
-import { sendAppointmentConfirmation, sendAppointmentReschedule } from "../../../../lib/whatsapp/notifications";
+import {
+  buildAppointmentTypeLabel,
+  sendAppointmentConfirmation,
+  sendAppointmentReschedule,
+} from "../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ params, request, redirect }) => {
   const token = params.token;
@@ -115,8 +119,7 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
   // Exame tem valor próprio, em exam_types (não em clinic_locations).
   const priceCents =
     appointmentType === "exam" ? examType?.price_cents : appointmentType === "return_visit" ? null : location?.price_first_visit_cents;
-  const typeLabel =
-    appointmentType === "exam" ? (examType?.name ?? "Exame") : appointmentType === "return_visit" ? "Retorno" : "Consulta";
+  const typeLabel = buildAppointmentTypeLabel(appointmentType, examType?.name);
 
   let appointmentId: string;
 
@@ -148,15 +151,14 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
 
     appointmentId = appointment.id;
 
-    // Notificação de remarcação de exame fica pendente do template
-    // `exame_remarcado` (ainda não submetido à Meta — ver plano, Fase 6).
-    if (guardian?.phone && appointmentType !== "exam") {
+    if (guardian?.phone) {
       await sendAppointmentReschedule({
         supabase,
         appointmentId,
         guardianId: guardian.id,
         guardianPhone: guardian.phone,
         patientName: patient.full_name,
+        typeLabel,
         scheduledAt: startDate,
         locationLabel,
         locationAddress,
@@ -216,15 +218,14 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
 
     appointmentId = newAppointment.id;
 
-    // Notificação de confirmação de exame fica pendente do template
-    // `exame_confirmado` (ainda não submetido à Meta — ver plano, Fase 6).
-    if (guardian?.phone && appointmentType !== "exam") {
+    if (guardian?.phone) {
       await sendAppointmentConfirmation({
         supabase,
         appointmentId,
         guardianId: guardian.id,
         guardianPhone: guardian.phone,
         patientName: patient.full_name,
+        typeLabel,
         scheduledAt: startDate,
         locationLabel,
         locationAddress,

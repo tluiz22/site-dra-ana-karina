@@ -3,7 +3,7 @@ import { createClient } from "../../../../../lib/supabase/server";
 import { createEvent } from "../../../../../lib/google/calendar";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../../../lib/scheduling/getAvailableSlotsForDate";
 import { resolveClinicLocationIds, type LocationCategory } from "../../../../../lib/scheduling/resolveClinicLocationIds";
-import { sendAppointmentConfirmation } from "../../../../../lib/whatsapp/notifications";
+import { buildAppointmentTypeLabel, sendAppointmentConfirmation } from "../../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const formData = await request.formData();
@@ -124,7 +124,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     ? await supabase.from("exam_types").select("name, price_cents").eq("id", examTypeId).maybeSingle()
     : { data: null };
 
-  const typeLabel = isExam ? (examType?.name ?? "Exame") : appointmentType === "return_visit" ? "Retorno" : "Consulta";
+  const typeLabel = buildAppointmentTypeLabel(appointmentType, examType?.name);
   const locationLabel = location?.type === "clinic" ? "Consultório" : location?.type === "exam" ? "Exames" : "Domiciliar";
 
   const { data: newAppointment, error: insertError } = await supabase
@@ -163,22 +163,23 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   await supabase.from("appointments").update({ google_event_id: event.id }).eq("id", newAppointment.id);
 
   // Confirmação por WhatsApp (Fase 3a) — melhor esforço: uma falha aqui não
-  // pode invalidar a consulta já criada no Supabase e no Calendar. Exame
-  // fica pendente do template `exame_confirmado` (ainda não submetido à
-  // Meta — ver plano, Fase 6).
-  if (guardian?.phone && !isExam) {
+  // pode invalidar a consulta já criada no Supabase e no Calendar.
+  if (guardian?.phone) {
     await sendAppointmentConfirmation({
       supabase,
       appointmentId: newAppointment.id,
       guardianId: guardian.id,
       guardianPhone: guardian.phone,
       patientName: patient.full_name,
+      typeLabel,
       scheduledAt: startDate,
       locationLabel,
       locationAddress: location?.address ?? null,
       // Retorno não tem valor próprio — está incluso no valor da consulta
-      // anterior (decisão do cliente); `null` aciona esse texto na notificação.
-      priceCents: appointmentType === "return_visit" ? null : location?.price_first_visit_cents,
+      // anterior (decisão do cliente); exame tem valor próprio em
+      // exam_types.price_cents; `null` aciona o texto de "incluso" na
+      // notificação.
+      priceCents: isExam ? examType?.price_cents : appointmentType === "return_visit" ? null : location?.price_first_visit_cents,
     });
   }
 

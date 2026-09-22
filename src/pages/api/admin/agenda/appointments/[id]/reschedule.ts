@@ -3,7 +3,7 @@ import { createClient } from "../../../../../../lib/supabase/server";
 import { rescheduleEvent } from "../../../../../../lib/google/calendar";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../../../../lib/scheduling/getAvailableSlotsForDate";
 import { resolveClinicLocationIds, type LocationCategory } from "../../../../../../lib/scheduling/resolveClinicLocationIds";
-import { sendAppointmentReschedule } from "../../../../../../lib/whatsapp/notifications";
+import { buildAppointmentTypeLabel, sendAppointmentReschedule } from "../../../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ params, request, cookies, redirect }) => {
   const { id } = params;
@@ -51,14 +51,16 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
 
   let clinicLocationIds: string[];
   let examDurationMinutes: number | undefined;
+  let examName: string | undefined;
   if (isExam) {
     const { data: examType } = await supabase
       .from("exam_types")
-      .select("duration_minutes")
+      .select("name, duration_minutes")
       .eq("id", appointment.exam_type_id)
       .maybeSingle();
     if (!examType) return back("1");
     examDurationMinutes = examType.duration_minutes;
+    examName = examType.name;
     const { data: examLocation } = await supabase
       .from("clinic_locations")
       .select("id")
@@ -110,14 +112,13 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   });
 
   // Notificação de remarcação por WhatsApp (Fase 3a) — melhor esforço.
-  // Exame fica pendente do template (ainda não submetido à Meta).
   const patient = (appointment.patients ?? null) as unknown as {
     full_name: string;
     guardians: { id: string; full_name: string; phone: string } | null;
   } | null;
   const guardian = patient?.guardians ?? null;
 
-  if (patient && guardian?.phone && !isExam) {
+  if (patient && guardian?.phone) {
     const { data: location } = await supabase
       .from("clinic_locations")
       .select("type, address")
@@ -130,8 +131,9 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
       guardianId: guardian.id,
       guardianPhone: guardian.phone,
       patientName: patient.full_name,
+      typeLabel: buildAppointmentTypeLabel(appointmentType, examName),
       scheduledAt: startDate,
-      locationLabel: location?.type === "clinic" ? "Consultório" : "Domiciliar",
+      locationLabel: location?.type === "clinic" ? "Consultório" : location?.type === "exam" ? "Exames" : "Domiciliar",
       locationAddress: location?.address ?? null,
     });
   }

@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { createClient } from "../../../../../../lib/supabase/server";
 import { cancelEvent } from "../../../../../../lib/google/calendar";
-import { sendAppointmentCancellation } from "../../../../../../lib/whatsapp/notifications";
+import { buildAppointmentTypeLabel, sendAppointmentCancellation } from "../../../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ params, request, cookies }) => {
   const { id } = params;
@@ -24,7 +24,7 @@ export const POST: APIRoute = async ({ params, request, cookies }) => {
     const { data: appointment } = await supabase
       .from("appointments")
       .select(
-        "scheduled_at, patients ( full_name, guardians ( id, full_name, phone ) ), clinic_locations ( type )"
+        "scheduled_at, appointment_type, patients ( full_name, guardians ( id, full_name, phone ) ), clinic_locations ( type ), exam_types ( name )"
       )
       .eq("id", appointmentId)
       .single();
@@ -38,6 +38,7 @@ export const POST: APIRoute = async ({ params, request, cookies }) => {
     } | null;
     const guardian = patient?.guardians ?? null;
     const location = (appointment?.clinic_locations ?? null) as unknown as { type: string } | null;
+    const examType = (appointment?.exam_types ?? null) as unknown as { name: string } | null;
 
     if (appointment && patient && guardian?.phone) {
       await sendAppointmentCancellation({
@@ -46,8 +47,9 @@ export const POST: APIRoute = async ({ params, request, cookies }) => {
         guardianId: guardian.id,
         guardianPhone: guardian.phone,
         patientName: patient.full_name,
+        typeLabel: buildAppointmentTypeLabel(appointment.appointment_type, examType?.name),
         scheduledAt: new Date(appointment.scheduled_at),
-        locationLabel: location?.type === "clinic" ? "Consultório" : "Domiciliar",
+        locationLabel: location?.type === "clinic" ? "Consultório" : location?.type === "exam" ? "Exames" : "Domiciliar",
       });
     }
   }

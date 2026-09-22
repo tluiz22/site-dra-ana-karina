@@ -17,8 +17,14 @@ interface NotificationInput {
   guardianId: string;
   guardianPhone: string; // E.164, ex.: "+5584981880777"
   patientName: string;
+  // "Consulta" | "Retorno" | "Exame (<nome do exame>)" — primeira variável
+  // do template (set/2026). Evita concordância de gênero na frase
+  // ("a consulta ... confirmada" vs "o exame ... confirmado" não cabem na
+  // mesma frase com uma variável simples): o texto do template não flexiona
+  // nada, só encaixa esse rótulo pronto ("Atendimento confirmado: {{1}}...").
+  typeLabel: string;
   scheduledAt: Date;
-  locationLabel: string; // "Consultório" | "Domiciliar"
+  locationLabel: string; // "Consultório" | "Domiciliar" | "Exames"
   // Endereço completo do local (`clinic_locations.address`) — nulo para
   // atendimento domiciliar (não há endereço fixo, é a equipe que vai até a
   // casa). Só usado pelas notificações que incluem "onde será a consulta"
@@ -46,12 +52,22 @@ interface NotificationSpec {
   // confirmação usa.
   includePrice?: boolean;
   buildPreview: (
+    typeLabel: string,
     patientName: string,
     whenLabel: string,
     locationLabel: string,
     addressText: string | null,
     priceText: string | null
   ) => string;
+}
+
+// "Consulta" | "Retorno" | "Exame (<nome>)" — ver NotificationInput.typeLabel.
+export function buildAppointmentTypeLabel(
+  appointmentType: string,
+  examName?: string | null
+): string {
+  if (appointmentType === "exam") return examName ? `Exame (${examName})` : "Exame";
+  return appointmentType === "return_visit" ? "Retorno" : "Consulta";
 }
 
 // Texto do endereço/localização enviado como variável do template. Sem
@@ -86,6 +102,7 @@ async function sendNotification(
     guardianId,
     guardianPhone,
     patientName,
+    typeLabel,
     scheduledAt,
     locationLabel,
     locationAddress,
@@ -99,14 +116,16 @@ async function sendNotification(
   const addressText = spec.includeAddress ? buildLocationAddressText(locationAddress) : null;
   const priceText = spec.includePrice ? buildPriceText(priceCents) : null;
 
-  // Ordem dos parâmetros ({{1}} nome, {{2}} data-hora, {{3}} local, {{4}}
-  // endereço, {{5}} valor) precisa bater com o corpo do template aprovado na
-  // Meta — endereço e valor só entram quando a notificação os usa.
-  const bodyParameters = [patientName, whenLabel, locationLabel];
+  // Ordem dos parâmetros ({{1}} tipo, {{2}} nome, {{3}} data-hora, {{4}}
+  // local, {{5}} endereço, {{6}} valor) precisa bater com o corpo do
+  // template aprovado na Meta — endereço e valor só entram quando a
+  // notificação os usa. "Tipo" entra em set/2026 pra reaproveitar os mesmos
+  // templates entre consulta/retorno/exame (ver NotificationInput.typeLabel).
+  const bodyParameters = [typeLabel, patientName, whenLabel, locationLabel];
   if (addressText !== null) bodyParameters.push(addressText);
   if (priceText !== null) bodyParameters.push(priceText);
 
-  const bodyPreview = spec.buildPreview(patientName, whenLabel, locationLabel, addressText, priceText);
+  const bodyPreview = spec.buildPreview(typeLabel, patientName, whenLabel, locationLabel, addressText, priceText);
 
   let status: string;
   let waMessageId: string | null = null;
@@ -154,47 +173,52 @@ async function sendNotification(
   return status;
 }
 
-// Consulta recém-marcada.
+// Consulta/retorno/exame recém-marcado.
 export function sendAppointmentConfirmation(input: NotificationInput): Promise<string> {
   return sendNotification(input, {
     messageType: "appointment_confirmation",
     templateName: import.meta.env.WHATSAPP_TEMPLATE_CONFIRMATION,
     includeAddress: true,
     includePrice: true,
-    buildPreview: (name, when, location, address, price) =>
-      `Consulta de ${name} marcada para ${when} — ${location}. ${address} ${price} ` +
+    buildPreview: (type, name, when, location, address, price) =>
+      `Atendimento confirmado: ${type} de ${name}, para ${when}, no ${location}. ${address} ${price} ` +
       "Atendimento somente particular — pagamento em dinheiro, transferência bancária ou PIX.",
   });
 }
 
-// Consulta remarcada — `scheduledAt`/`locationLabel` são os novos valores.
+// Consulta/retorno/exame remarcado — `scheduledAt`/`locationLabel` são os
+// novos valores.
 export function sendAppointmentReschedule(input: NotificationInput): Promise<string> {
   return sendNotification(input, {
     messageType: "appointment_reschedule",
     templateName: import.meta.env.WHATSAPP_TEMPLATE_RESCHEDULE,
     includeAddress: true,
-    buildPreview: (name, when, location, address) =>
-      `Consulta de ${name} remarcada para ${when} — ${location}. ${address}`,
+    buildPreview: (type, name, when, location, address) =>
+      `Atendimento remarcado: ${type} de ${name}, para ${when}, no ${location}. ${address}`,
   });
 }
 
-// Consulta cancelada — `scheduledAt`/`locationLabel` são os valores que
-// estavam agendados. Sem endereço: não há mais consulta pra dizer onde é.
+// Consulta/retorno/exame cancelado — `scheduledAt`/`locationLabel` são os
+// valores que estavam agendados. Sem endereço: não há mais consulta pra
+// dizer onde é.
 export function sendAppointmentCancellation(input: NotificationInput): Promise<string> {
   return sendNotification(input, {
     messageType: "appointment_cancellation",
     templateName: import.meta.env.WHATSAPP_TEMPLATE_CANCELLATION,
-    buildPreview: (name, when, location) => `Consulta de ${name} de ${when} — ${location} foi cancelada.`,
+    buildPreview: (type, name, when, location) =>
+      `Atendimento cancelado: ${type} de ${name}, marcado para ${when}, no ${location}. ` +
+      "Se quiser remarcar, é só responder por aqui.",
   });
 }
 
-// Lembrete disparado pelo cron ~1 dia antes da consulta.
+// Lembrete disparado pelo cron ~1 dia antes da consulta/retorno/exame.
 export function sendAppointmentReminder(input: NotificationInput): Promise<string> {
   return sendNotification(input, {
     messageType: "appointment_reminder",
     templateName: import.meta.env.WHATSAPP_TEMPLATE_REMINDER,
     includeAddress: true,
-    buildPreview: (name, when, location, address) =>
-      `Lembrete: consulta de ${name} em ${when} — ${location}. ${address}`,
+    buildPreview: (type, name, when, location, address) =>
+      `Lembrete: ${type} de ${name} é amanhã, ${when}, no ${location}. ${address} ` +
+      "Nos vemos em breve! Qualquer dúvida ou se precisar remarcar, é só responder esta mensagem.",
   });
 }

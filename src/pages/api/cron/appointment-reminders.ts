@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { createServiceClient } from "../../../lib/supabase/service";
 import { listEvents } from "../../../lib/google/calendar";
-import { sendAppointmentReminder } from "../../../lib/whatsapp/notifications";
+import { buildAppointmentTypeLabel, sendAppointmentReminder } from "../../../lib/whatsapp/notifications";
 
 // Cron da Vercel (ver `vercel.json`). Dispara o lembrete de consulta para
 // todo agendamento ativo nas próximas ~26h que ainda não recebeu lembrete
@@ -31,7 +31,7 @@ export const GET: APIRoute = async ({ request }) => {
   const { data: candidates, error } = await supabase
     .from("appointments")
     .select(
-      "id, google_event_id, scheduled_at, clinic_locations ( type, address ), patients ( full_name, guardians ( id, full_name, phone ) )"
+      "id, google_event_id, scheduled_at, appointment_type, clinic_locations ( type, address ), exam_types ( name ), patients ( full_name, guardians ( id, full_name, phone ) )"
     )
     .in("status", ["scheduled", "confirmed"])
     .is("reminder_sent_at", null)
@@ -85,6 +85,7 @@ export const GET: APIRoute = async ({ request }) => {
       type: string;
       address: string | null;
     } | null;
+    const examType = (appointment.exam_types ?? null) as unknown as { name: string } | null;
 
     if (!patient || !guardian?.phone) {
       continue;
@@ -96,8 +97,9 @@ export const GET: APIRoute = async ({ request }) => {
       guardianId: guardian.id,
       guardianPhone: guardian.phone,
       patientName: patient.full_name,
+      typeLabel: buildAppointmentTypeLabel(appointment.appointment_type, examType?.name),
       scheduledAt: new Date(appointment.scheduled_at),
-      locationLabel: location?.type === "clinic" ? "Consultório" : "Domiciliar",
+      locationLabel: location?.type === "clinic" ? "Consultório" : location?.type === "exam" ? "Exames" : "Domiciliar",
       locationAddress: location?.address ?? null,
     });
 
