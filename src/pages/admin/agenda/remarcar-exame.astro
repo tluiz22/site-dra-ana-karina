@@ -1,0 +1,244 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { createClient } from "../../../lib/supabase/server";
+import { getAvailableSlotsForDate } from "../../../lib/scheduling/getAvailableSlotsForDate";
+
+const supabase = createClient(Astro.request, Astro.cookies);
+
+const appointmentId = Astro.url.searchParams.get("appointment_id");
+
+if (!appointmentId) {
+  return Astro.redirect("/admin/agenda");
+}
+
+const { data: appointment } = await supabase
+  .from("appointments")
+  .select(
+    "id, appointment_type, scheduled_at, status, exam_type_id, patients ( full_name, guardians ( full_name, phone ) ), exam_types ( name, duration_minutes )"
+  )
+  .eq("id", appointmentId)
+  .single();
+
+// Não é exame (ou não existe) — manda pra tela certa em vez de mostrar um
+// formulário sem sentido.
+if (!appointment || !["scheduled", "confirmed"].includes(appointment.status)) {
+  return Astro.redirect("/admin/agenda");
+}
+if (appointment.appointment_type !== "exam") {
+  return Astro.redirect(`/admin/agenda/remarcar?appointment_id=${appointmentId}`);
+}
+
+const patient = (appointment.patients ?? null) as any;
+const guardian = patient?.guardians ?? null;
+const examType = appointment.exam_types as unknown as { name: string; duration_minutes: number } | null;
+
+const { data: examLocation } = await supabase
+  .from("clinic_locations")
+  .select("id")
+  .eq("type", "exam")
+  .eq("is_active", true)
+  .maybeSingle();
+
+const { data: availabilityWindows } = examLocation
+  ? await supabase
+      .from("availability_windows")
+      .select("weekday")
+      .eq("clinic_location_id", examLocation.id)
+      .eq("is_active", true)
+  : { data: [] };
+
+const availableWeekdaysForExam = [...new Set((availabilityWindows ?? []).map((w) => w.weekday))];
+
+function todayFortaleza(): string {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function toFortalezaDateStr(iso: string): string {
+  return new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function toFortalezaTimeStr(iso: string): string {
+  return new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(11, 16);
+}
+
+const currentDateStr = toFortalezaDateStr(appointment.scheduled_at);
+const currentTimeStr = toFortalezaTimeStr(appointment.scheduled_at);
+
+const dateParam = Astro.url.searchParams.get("date");
+const isValidDateParam = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) && dateParam >= todayFortaleza();
+const date = isValidDateParam ? dateParam : currentDateStr >= todayFortaleza() ? currentDateStr : todayFortaleza();
+
+const errorMessages: Record<string, string> = {
+  slot_taken: "Esse horário acabou de deixar de estar livre. Escolha outro.",
+  "1": "Não foi possível remarcar o exame. Confira os dados e tente novamente.",
+};
+const errorParam = Astro.url.searchParams.get("error");
+const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
+
+const slots =
+  examLocation && examType
+    ? await getAvailableSlotsForDate({
+        supabase,
+        clinicLocationIds: [examLocation.id],
+        date,
+        appointmentType: "exam",
+        examDurationMinutes: examType.duration_minutes,
+      })
+    : [];
+---
+
+<AdminLayout title="Remarcar exame">
+  <a href={`/admin/agenda?date=${currentDateStr}`} class="text-sm text-sky-700 hover:underline">&larr; Agenda</a>
+
+  <h1 class="mt-3 text-2xl font-bold text-slate-900">Remarcar exame</h1>
+
+  <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+    <p class="font-medium">{patient?.full_name}</p>
+    <p class="text-slate-500">
+      Resp.: {guardian?.full_name} · {guardian?.phone}
+    </p>
+    <p class="mt-1 text-slate-500">{examType?.name}</p>
+    <p class="mt-1 text-slate-500">
+      Atualmente em {currentDateStr.split("-").reverse().join("/")} às {currentTimeStr}
+    </p>
+  </div>
+
+  {
+    errorMessage && (
+      <p class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+    )
+  }
+
+  <form
+    method="POST"
+    action={`/api/admin/agenda/appointments/${appointmentId}/reschedule`}
+    class="mt-6 flex max-w-xl flex-col gap-6"
+  >
+    <input type="hidden" name="appointment_type" value="exam" />
+
+    <div>
+      <label for="date" class="block text-sm font-medium text-slate-700">Data</label>
+      <input
+        type="date"
+        id="date"
+        name="date"
+        value={date}
+        min={todayFortaleza()}
+        class="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+      />
+      <p id="date_availability_warning" class="mt-1 hidden text-xs text-amber-700"></p>
+    </div>
+
+    <div>
+      <span class="block text-sm font-medium text-slate-700">Novo horário</span>
+      <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
+        {
+          slots.length ? (
+            slots.map((slot) => (
+              <label class="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50">
+                <input
+                  type="radio"
+                  name="start"
+                  value={`${slot.start.toISOString()}|${slot.clinicLocationId}`}
+                  required
+                  class="mr-1"
+                />
+                {slot.label}
+              </label>
+            ))
+          ) : (
+            <p class="text-sm text-slate-500">
+              Nenhum horário livre para essa data/exame. Tente outra data.
+            </p>
+          )
+        }
+      </div>
+    </div>
+
+    <button
+      id="submit_btn"
+      type="submit"
+      class="w-fit rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      Confirmar remarcação
+    </button>
+  </form>
+</AdminLayout>
+
+<script define:vars={{ availableWeekdaysForExam, examTypeId: appointment.exam_type_id }} is:inline>
+  window.__availableWeekdaysForExam = availableWeekdaysForExam;
+  window.__examTypeId = examTypeId;
+</script>
+
+<script>
+  const dateInput = document.getElementById("date") as HTMLInputElement;
+  const slotsContainer = document.getElementById("slots_container") as HTMLDivElement;
+  const dateWarning = document.getElementById("date_availability_warning") as HTMLParagraphElement;
+  const submitBtn = document.getElementById("submit_btn") as HTMLButtonElement;
+  const availableWeekdaysForExam = (window as any).__availableWeekdaysForExam as number[];
+  const examTypeId = (window as any).__examTypeId as string;
+
+  function weekdayInFortaleza(dateStr: string): number {
+    return new Date(`${dateStr}T00:00:00-03:00`).getUTCDay();
+  }
+
+  function isExamAvailableOnDate(): boolean {
+    if (!dateInput.value) return true;
+    return availableWeekdaysForExam.includes(weekdayInFortaleza(dateInput.value));
+  }
+
+  function showDateUnavailableWarning() {
+    dateWarning.textContent = "Não há atendimento de exames nesse dia da semana. Escolha outra data.";
+    dateWarning.classList.remove("hidden");
+    submitBtn.disabled = true;
+    slotsContainer.innerHTML = "";
+  }
+
+  async function refreshSlots() {
+    if (!dateInput.value) return;
+
+    if (!isExamAvailableOnDate()) {
+      showDateUnavailableWarning();
+      return;
+    }
+
+    dateWarning.classList.add("hidden");
+    submitBtn.disabled = false;
+
+    slotsContainer.innerHTML = '<p class="text-sm text-slate-500">Carregando horários…</p>';
+
+    const params = new URLSearchParams({
+      exam_type_id: examTypeId,
+      date: dateInput.value,
+    });
+
+    const response = await fetch(`/api/admin/agenda/available-exam-slots?${params.toString()}`);
+    const { slots } = await response.json();
+    slotsContainer.innerHTML = "";
+
+    if (!slots.length) {
+      slotsContainer.innerHTML =
+        '<p class="text-sm text-slate-500">Nenhum horário livre para essa data/exame. Tente outra data.</p>';
+      return;
+    }
+
+    slots.forEach((slot: { start: string; label: string; clinicLocationId: string }) => {
+      const label = document.createElement("label");
+      label.className =
+        "cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "start";
+      input.value = `${slot.start}|${slot.clinicLocationId}`;
+      input.required = true;
+      input.className = "mr-1";
+      label.appendChild(input);
+      label.append(slot.label);
+      slotsContainer.appendChild(label);
+    });
+  }
+
+  if (!isExamAvailableOnDate()) showDateUnavailableWarning();
+
+  dateInput.addEventListener("change", refreshSlots);
+</script>

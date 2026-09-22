@@ -11,23 +11,25 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   const locationCategoryRaw = formData.get("location_category")?.toString();
   const date = formData.get("date")?.toString();
   const appointmentTypeRaw = formData.get("appointment_type")?.toString();
-  // O rádio de horário carrega "<iso>|<clinicLocationId>" — o consultório
-  // físico específico (entre os que a categoria escolhida engloba) já vem
-  // decidido pelo horário escolhido; revalidamos contra a lista recalculada
-  // no servidor e usamos o clinicLocationId QUE ELA devolve.
+  // O rádio de horário carrega "<iso>|<clinicLocationId>" — o local físico
+  // específico já vem decidido pelo horário escolhido; revalidamos contra a
+  // lista recalculada no servidor e usamos o clinicLocationId QUE ELA devolve.
   const startParam = formData.get("start")?.toString();
   const startIso = startParam?.split("|")[0];
 
   const appointmentType: AppointmentType | null =
-    appointmentTypeRaw === "first_visit" || appointmentTypeRaw === "return_visit"
+    appointmentTypeRaw === "first_visit" || appointmentTypeRaw === "return_visit" || appointmentTypeRaw === "exam"
       ? appointmentTypeRaw
       : null;
+  const isExam = appointmentType === "exam";
   const locationCategory: LocationCategory = locationCategoryRaw === "home_visit" ? "home_visit" : "clinic";
 
   const back = (error: string) =>
-    redirect(
-      `/admin/agenda/remarcar?appointment_id=${id}&location_category=${locationCategory}&date=${date ?? ""}&appointment_type=${appointmentType ?? "first_visit"}&error=${error}`
-    );
+    isExam
+      ? redirect(`/admin/agenda/remarcar-exame?appointment_id=${id}&date=${date ?? ""}&error=${error}`)
+      : redirect(
+          `/admin/agenda/remarcar?appointment_id=${id}&location_category=${locationCategory}&date=${date ?? ""}&appointment_type=${appointmentType ?? "first_visit"}&error=${error}`
+        );
 
   if (!id || !date || !startIso || !appointmentType) {
     return back("1");
@@ -37,7 +39,9 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
 
   const { data: appointment } = await supabase
     .from("appointments")
-    .select("id, google_event_id, status, patients ( full_name, guardians ( id, full_name, phone ) )")
+    .select(
+      "id, google_event_id, status, exam_type_id, patients ( full_name, guardians ( id, full_name, phone ) )"
+    )
     .eq("id", id)
     .single();
 
@@ -45,11 +49,30 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
     return back("1");
   }
 
-  const clinicLocationIds = await resolveClinicLocationIds(supabase, locationCategory);
+  let clinicLocationIds: string[];
+  let examDurationMinutes: number | undefined;
+  if (isExam) {
+    const { data: examType } = await supabase
+      .from("exam_types")
+      .select("duration_minutes")
+      .eq("id", appointment.exam_type_id)
+      .maybeSingle();
+    if (!examType) return back("1");
+    examDurationMinutes = examType.duration_minutes;
+    const { data: examLocation } = await supabase
+      .from("clinic_locations")
+      .select("id")
+      .eq("type", "exam")
+      .eq("is_active", true)
+      .maybeSingle();
+    clinicLocationIds = examLocation ? [examLocation.id] : [];
+  } else {
+    clinicLocationIds = await resolveClinicLocationIds(supabase, locationCategory);
+  }
 
   const [{ data: settings }, slots] = await Promise.all([
     supabase.from("appointment_settings").select("*").eq("id", 1).single(),
-    getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType }),
+    getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType, examDurationMinutes }),
   ]);
 
   if (!settings) {
@@ -62,8 +85,9 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   }
   const clinicLocationId = matchedSlot.clinicLocationId;
 
-  const durationMinutes =
-    appointmentType === "return_visit"
+  const durationMinutes = isExam
+    ? (examDurationMinutes ?? settings.default_appointment_duration_minutes)
+    : appointmentType === "return_visit"
       ? settings.default_return_visit_duration_minutes
       : settings.default_appointment_duration_minutes;
 
@@ -86,13 +110,14 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   });
 
   // Notificação de remarcação por WhatsApp (Fase 3a) — melhor esforço.
+  // Exame fica pendente do template (ainda não submetido à Meta).
   const patient = (appointment.patients ?? null) as unknown as {
     full_name: string;
     guardians: { id: string; full_name: string; phone: string } | null;
   } | null;
   const guardian = patient?.guardians ?? null;
 
-  if (patient && guardian?.phone) {
+  if (patient && guardian?.phone && !isExam) {
     const { data: location } = await supabase
       .from("clinic_locations")
       .select("type, address")

@@ -76,6 +76,12 @@ const sortedEvents = [...events].sort(
       >
         Marcar consulta
       </a>
+      <a
+        href={`/admin/agenda/marcar-exame?date=${date}`}
+        class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+      >
+        Marcar exame
+      </a>
     </div>
   </div>
 
@@ -142,7 +148,7 @@ const sortedEvents = [...events].sort(
                   {!isCancelled && (
                     <div class="mt-2 flex flex-wrap gap-2">
                       <a
-                        href={`/admin/agenda/remarcar?appointment_id=${appointment.id}`}
+                        href={`${appointment.appointment_type === "exam" ? "/admin/agenda/remarcar-exame" : "/admin/agenda/remarcar"}?appointment_id=${appointment.id}`}
                         class="rounded-md border border-sky-300 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
                       >
                         Remarcar
