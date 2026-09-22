@@ -3,10 +3,14 @@
 //
 // Mesma ideia de identificação usada no case 1 (nunca listar tudo às cegas
 // para um responsável-convênio com muitas crianças vinculadas): até 3
-// consultas futuras viram lista de escolha; mais de 3, pergunta a data de
-// nascimento da criança para filtrar. Ao identificar a consulta, gera uma
-// linha em `booking_links` (`mode=reschedule`) com o mesmo local/tipo da
-// consulta atual — só a data/horário são escolhidos na página.
+// consultas/exames futuros viram lista de escolha; mais de 3, pergunta a
+// data de nascimento da criança para filtrar. Ao identificar, gera uma
+// linha em `booking_links` (`mode=reschedule`) com o mesmo local/tipo do
+// agendamento atual — só a data/horário são escolhidos na página.
+//
+// "category" (consulta vs exame, ver shared.ts) acompanha o contexto a
+// conversa inteira — Consultas > Remarcar nunca deve listar/mencionar um
+// exame, e vice-versa, mesmo sendo o mesmo fluxo por baixo dos panos.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
@@ -19,6 +23,7 @@ import {
   sendAndLog,
   updateConversationState,
   type AppointmentCandidate,
+  type AppointmentCategory,
   type Selection,
 } from "./shared";
 import * as texts from "./messages";
@@ -26,16 +31,20 @@ import * as texts from "./messages";
 export const RESCHEDULE_STATES: ReadonlySet<string> = new Set(["RESCHEDULE_SELECT"]);
 
 interface RescheduleContext {
+  category: AppointmentCategory;
   awaiting?: "appointment_choice" | "birthdate_search" | "confirm_appointment";
   candidates?: AppointmentCandidate[];
   pending_appointment?: AppointmentCandidate;
 }
 
-// MENU opção 3 → identifica a(s) consulta(s) futura(s) desse responsável.
+// Consultas > Remarcar ou Exames > Remarcar → identifica a(s) consulta(s)/
+// exame(s) futuro(s) desse responsável, já filtrado pela categoria certa
+// (nunca mistura consulta com exame).
 export async function startReschedule(
   supabase: SupabaseClient,
   guardianPhone: string,
-  guardianId: string | null
+  guardianId: string | null,
+  category: AppointmentCategory
 ): Promise<void> {
   if (!guardianId) {
     const body = texts.rescheduleNoGuardianText();
@@ -46,8 +55,8 @@ export async function startReschedule(
     return;
   }
 
-  const candidates = await fetchUpcomingAppointments(supabase, guardianId);
-  await presentCandidates(supabase, guardianPhone, guardianId, candidates);
+  const candidates = await fetchUpcomingAppointments(supabase, guardianId, category);
+  await presentCandidates(supabase, guardianPhone, guardianId, category, candidates);
 }
 
 export async function handleRescheduleState(
@@ -57,7 +66,7 @@ export async function handleRescheduleState(
   rawContext: Record<string, unknown>,
   selection: Selection
 ): Promise<void> {
-  const context = rawContext as RescheduleContext;
+  const context = rawContext as unknown as RescheduleContext;
 
   if (context.awaiting === "appointment_choice") {
     const candidates = context.candidates ?? [];
@@ -67,7 +76,7 @@ export async function handleRescheduleState(
       await sendAndLog(supabase, guardianId, "bot_not_understood", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
-      await sendAppointmentChoice(supabase, guardianPhone, guardianId, candidates);
+      await sendAppointmentChoice(supabase, guardianPhone, guardianId, context.category, candidates);
       return;
     }
     await finishReschedule(supabase, guardianPhone, guardianId, match);
@@ -87,7 +96,7 @@ export async function handleRescheduleState(
     const matches = (context.candidates ?? []).filter((c) => c.birthdate === isoBirthdate);
 
     if (matches.length === 0) {
-      const body = texts.noMatchingAppointmentText();
+      const body = texts.noMatchingAppointmentText(context.category);
       await sendAndLog(supabase, guardianId, "bot_reschedule_no_match", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
@@ -97,20 +106,28 @@ export async function handleRescheduleState(
 
     if (matches.length === 1) {
       const pending = matches[0];
-      const body = texts.confirmAppointmentText(pending.patient_name, formatWhen(new Date(pending.scheduled_at)));
+      const body = texts.confirmAppointmentText(
+        pending.patient_name,
+        formatWhen(new Date(pending.scheduled_at)),
+        context.category
+      );
       await sendAndLog(supabase, guardianId, "bot_reschedule_confirm", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
       await updateConversationState(supabase, guardianPhone, "RESCHEDULE_SELECT", {
-        context: { awaiting: "confirm_appointment", pending_appointment: pending } satisfies RescheduleContext,
+        context: {
+          category: context.category,
+          awaiting: "confirm_appointment",
+          pending_appointment: pending,
+        } satisfies RescheduleContext,
       });
       return;
     }
 
     // Mais de uma consulta para a mesma data de nascimento (ex.: gêmeos).
-    await sendAppointmentChoice(supabase, guardianPhone, guardianId, matches);
+    await sendAppointmentChoice(supabase, guardianPhone, guardianId, context.category, matches);
     await updateConversationState(supabase, guardianPhone, "RESCHEDULE_SELECT", {
-      context: { awaiting: "appointment_choice", candidates: matches } satisfies RescheduleContext,
+      context: { category: context.category, awaiting: "appointment_choice", candidates: matches } satisfies RescheduleContext,
     });
     return;
   }
@@ -118,7 +135,7 @@ export async function handleRescheduleState(
   if (context.awaiting === "confirm_appointment") {
     const pending = context.pending_appointment;
     if (!pending) {
-      const body = texts.couldNotIdentifyAppointmentText();
+      const body = texts.couldNotIdentifyAppointmentText(context.category);
       await sendAndLog(supabase, guardianId, "bot_reschedule_error", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
@@ -132,7 +149,7 @@ export async function handleRescheduleState(
       return;
     }
     if (answer.startsWith("n")) {
-      const body = texts.couldNotIdentifyAppointmentText();
+      const body = texts.couldNotIdentifyAppointmentText(context.category);
       await sendAndLog(supabase, guardianId, "bot_reschedule_error", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
@@ -144,7 +161,11 @@ export async function handleRescheduleState(
     await sendAndLog(supabase, guardianId, "bot_not_understood", notUnderstood, () =>
       sendTextMessage({ to: guardianPhone, body: notUnderstood })
     );
-    const body = texts.confirmAppointmentText(pending.patient_name, formatWhen(new Date(pending.scheduled_at)));
+    const body = texts.confirmAppointmentText(
+      pending.patient_name,
+      formatWhen(new Date(pending.scheduled_at)),
+      context.category
+    );
     await sendAndLog(supabase, guardianId, "bot_reschedule_confirm", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
@@ -157,10 +178,11 @@ async function presentCandidates(
   supabase: SupabaseClient,
   guardianPhone: string,
   guardianId: string | null,
+  category: AppointmentCategory,
   candidates: AppointmentCandidate[]
 ): Promise<void> {
   if (candidates.length === 0) {
-    const body = texts.rescheduleNoAppointmentsText();
+    const body = texts.rescheduleNoAppointmentsText(category);
     await sendAndLog(supabase, guardianId, "bot_reschedule_no_appointments", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
@@ -169,9 +191,9 @@ async function presentCandidates(
   }
 
   if (candidates.length <= 3) {
-    await sendAppointmentChoice(supabase, guardianPhone, guardianId, candidates);
+    await sendAppointmentChoice(supabase, guardianPhone, guardianId, category, candidates);
     await updateConversationState(supabase, guardianPhone, "RESCHEDULE_SELECT", {
-      context: { awaiting: "appointment_choice", candidates } satisfies RescheduleContext,
+      context: { category, awaiting: "appointment_choice", candidates } satisfies RescheduleContext,
     });
     return;
   }
@@ -183,7 +205,7 @@ async function presentCandidates(
   // Guarda a lista completa no contexto — a busca por data de nascimento
   // filtra em memória, sem precisar consultar o banco de novo.
   await updateConversationState(supabase, guardianPhone, "RESCHEDULE_SELECT", {
-    context: { awaiting: "birthdate_search", candidates } satisfies RescheduleContext,
+    context: { category, awaiting: "birthdate_search", candidates } satisfies RescheduleContext,
   });
 }
 
@@ -191,9 +213,10 @@ async function sendAppointmentChoice(
   supabase: SupabaseClient,
   guardianPhone: string,
   guardianId: string | null,
+  category: AppointmentCategory,
   candidates: AppointmentCandidate[]
 ): Promise<void> {
-  const body = texts.appointmentChoiceBodyText("remarcar");
+  const body = texts.appointmentChoiceBodyText("remarcar", category);
   await sendAndLog(supabase, guardianId, "bot_reschedule_choice", body, () =>
     sendInteractiveListMessage({
       to: guardianPhone,
@@ -238,8 +261,9 @@ async function finishReschedule(
     return;
   }
 
+  const category: AppointmentCategory = appointment.appointment_type === "exam" ? "exame" : "consulta";
   const url = buildAppUrl(`/agendar/${link.id}`);
-  const body = texts.rescheduleLinkText(appointment.patient_name, url);
+  const body = texts.rescheduleLinkText(appointment.patient_name, url, category);
   await sendAndLog(supabase, guardianId, "bot_reschedule_link", body, () =>
     sendTextMessage({ to: guardianPhone, body })
   );

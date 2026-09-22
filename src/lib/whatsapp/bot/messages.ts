@@ -5,7 +5,7 @@
 import type { ListSection } from "../client";
 import { formatWhen } from "../formatDateTime";
 import { formatCentsBRL } from "../../money";
-import { BACK_TO_MENU_LIST_ID } from "./shared";
+import { BACK_TO_MENU_LIST_ID, type AppointmentCategory } from "./shared";
 
 const DOCTOR_NAME = "Dra. Ana Karina Fernandes";
 
@@ -396,8 +396,45 @@ interface AppointmentCandidate {
   scheduled_at: string;
 }
 
-export function appointmentChoiceBodyText(action: "remarcar" | "cancelar"): string {
-  return `Qual consulta você quer ${action}?`;
+// "consulta" e "exame" são jornadas separadas (pedido do cliente, set/2026)
+// — Cancelar/Remarcar precisam dizer a palavra certa dependendo de onde o
+// responsável entrou (Consultas ou Exames), inclusive concordância de
+// gênero ("a consulta"/"o exame", "nenhuma"/"nenhum", "marcada"/"marcado").
+interface CategoryWords {
+  noun: string;
+  article: string;
+  ofArticle: string;
+  none: string;
+  adjEnd: "a" | "o";
+  demonstrative: string;
+  possessive: string;
+}
+
+function categoryWords(category: AppointmentCategory): CategoryWords {
+  if (category === "exame") {
+    return {
+      noun: "exame",
+      article: "o",
+      ofArticle: "do",
+      none: "nenhum",
+      adjEnd: "o",
+      demonstrative: "esse",
+      possessive: "seu",
+    };
+  }
+  return {
+    noun: "consulta",
+    article: "a",
+    ofArticle: "da",
+    none: "nenhuma",
+    adjEnd: "a",
+    demonstrative: "essa",
+    possessive: "sua",
+  };
+}
+
+export function appointmentChoiceBodyText(action: "remarcar" | "cancelar", category: AppointmentCategory): string {
+  return `Qual ${categoryWords(category).noun} você quer ${action}?`;
 }
 
 export function appointmentListSections(candidates: AppointmentCandidate[], idPrefix: string): ListSection[] {
@@ -410,12 +447,13 @@ export function appointmentListSections(candidates: AppointmentCandidate[], idPr
   return [{ rows }];
 }
 
-export function noMatchingAppointmentText(): string {
-  return "Não encontramos consulta futura para essa data de nascimento. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+export function noMatchingAppointmentText(category: AppointmentCategory): string {
+  const w = categoryWords(category);
+  return `Não encontramos ${w.noun} futur${w.adjEnd} para essa data de nascimento. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.`;
 }
 
-export function couldNotIdentifyAppointmentText(): string {
-  return "Não conseguimos confirmar qual consulta é. Escolha [4] Falar com a secretária no menu principal.";
+export function couldNotIdentifyAppointmentText(category: AppointmentCategory): string {
+  return `Não conseguimos confirmar qual ${categoryWords(category).noun} é. Escolha [4] Falar com a secretária no menu principal.`;
 }
 
 // --- case 3 · Remarcar --------------------------------------------------
@@ -424,17 +462,20 @@ export function rescheduleNoGuardianText(): string {
   return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
 }
 
-export function rescheduleNoAppointmentsText(): string {
-  return "Não encontramos nenhuma consulta futura para remarcar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+export function rescheduleNoAppointmentsText(category: AppointmentCategory): string {
+  const w = categoryWords(category);
+  return `Não encontramos ${w.none} ${w.noun} futur${w.adjEnd} para remarcar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.`;
 }
 
-export function confirmAppointmentText(patientName: string, whenLabel: string): string {
-  return `Encontramos a consulta de *${patientName}* em ${whenLabel} — é essa que você quer remarcar? Responda Sim ou Não.`;
+export function confirmAppointmentText(patientName: string, whenLabel: string, category: AppointmentCategory): string {
+  const w = categoryWords(category);
+  return `Encontramos ${w.article} ${w.noun} de *${patientName}* em ${whenLabel} — é ${w.demonstrative} que você quer remarcar? Responda Sim ou Não.`;
 }
 
-export function rescheduleLinkText(patientName: string, url: string): string {
+export function rescheduleLinkText(patientName: string, url: string, category: AppointmentCategory): string {
+  const w = categoryWords(category);
   return (
-    `Prontinho! Escolha o novo dia e horário para a consulta de ${patientName} neste link:\n${url}\n\n` +
+    `Prontinho! Escolha o novo dia e horário para ${w.article} ${w.noun} de ${patientName} neste link:\n${url}\n\n` +
     "O link expira em 30 minutos."
   );
 }
@@ -449,22 +490,26 @@ export function cancelNoGuardianText(): string {
   return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
 }
 
-export function cancelNoAppointmentsText(): string {
-  return "Não encontramos nenhuma consulta futura para cancelar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
+export function cancelNoAppointmentsText(category: AppointmentCategory): string {
+  const w = categoryWords(category);
+  return `Não encontramos ${w.none} ${w.noun} futur${w.adjEnd} para cancelar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.`;
 }
 
-export function confirmCancelText(patientName: string, whenLabel: string): string {
-  return `Confirma o cancelamento da consulta de *${patientName}* em ${whenLabel}? Responda Sim ou Não.`;
+export function confirmCancelText(patientName: string, whenLabel: string, category: AppointmentCategory): string {
+  const w = categoryWords(category);
+  return `Confirma o cancelamento ${w.ofArticle} ${w.noun} de *${patientName}* em ${whenLabel}? Responda Sim ou Não.`;
 }
 
-export function cancelAbortedText(): string {
-  return "Ok, mantivemos sua consulta marcada.";
+export function cancelAbortedText(category: AppointmentCategory): string {
+  const w = categoryWords(category);
+  return `Ok, mantivemos ${w.possessive} ${w.noun} marcad${w.adjEnd}.`;
 }
 
-export function cancelSuccessText(patientName: string, whenLabel: string): string {
+export function cancelSuccessText(patientName: string, whenLabel: string, category: AppointmentCategory): string {
+  const w = categoryWords(category);
   return (
-    `Prontinho, cancelamos a consulta de ${patientName} que estava marcada para ${whenLabel}. ` +
-    "Se precisar marcar uma nova consulta, é só me chamar de novo."
+    `Prontinho, cancelamos ${w.article} ${w.noun} de ${patientName} que estava marcad${w.adjEnd} para ${whenLabel}. ` +
+    `Se precisar marcar ${w.noun === "exame" ? "um novo exame" : "uma nova consulta"}, é só me chamar de novo.`
   );
 }
 

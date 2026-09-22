@@ -299,12 +299,12 @@ async function handleConsultasMenu(
   }
 
   if (matchesOption(selection, "3", texts.CONSULTAS_LIST_ID.cancelar)) {
-    await startCancel(supabase, guardianPhone, guardianId);
+    await startCancel(supabase, guardianPhone, guardianId, "consulta");
     return;
   }
 
   if (matchesOption(selection, "4", texts.CONSULTAS_LIST_ID.remarcar)) {
-    await startReschedule(supabase, guardianPhone, guardianId);
+    await startReschedule(supabase, guardianPhone, guardianId, "consulta");
     return;
   }
 
@@ -329,12 +329,12 @@ async function handleExamesMenu(
   }
 
   if (matchesOption(selection, "2", texts.EXAMES_LIST_ID.cancelar)) {
-    await startCancel(supabase, guardianPhone, guardianId);
+    await startCancel(supabase, guardianPhone, guardianId, "exame");
     return;
   }
 
   if (matchesOption(selection, "3", texts.EXAMES_LIST_ID.remarcar)) {
-    await startReschedule(supabase, guardianPhone, guardianId);
+    await startReschedule(supabase, guardianPhone, guardianId, "exame");
     return;
   }
 

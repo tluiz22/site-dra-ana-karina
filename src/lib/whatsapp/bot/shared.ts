@@ -234,17 +234,25 @@ export interface AppointmentCandidate {
   google_event_id: string | null;
 }
 
+// "consulta" e "exame" são jornadas separadas (pedido do cliente, set/2026):
+// Cancelar/Remarcar dentro de Consultas nunca deve listar um exame, e
+// vice-versa, mesmo reaproveitando a mesma função/fluxo por baixo.
+export type AppointmentCategory = "consulta" | "exame";
+
 export async function fetchUpcomingAppointments(
   supabase: SupabaseClient,
-  guardianId: string
+  guardianId: string,
+  category: AppointmentCategory
 ): Promise<AppointmentCandidate[]> {
   const nowIso = new Date().toISOString();
+  const typeFilter = category === "exame" ? ["exam"] : ["first_visit", "return_visit"];
   const { data: rows } = await supabase
     .from("appointments")
     .select(
       "id, scheduled_at, clinic_location_id, appointment_type, exam_type_id, google_event_id, patient_id, patients!inner(full_name, birthdate, guardian_id)"
     )
     .eq("patients.guardian_id", guardianId)
+    .in("appointment_type", typeFilter)
     .in("status", ["scheduled", "confirmed"])
     .gt("scheduled_at", nowIso)
     .order("scheduled_at", { ascending: true });
