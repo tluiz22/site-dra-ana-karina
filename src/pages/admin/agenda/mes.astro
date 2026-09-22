@@ -1,6 +1,9 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { createClient } from "../../../lib/supabase/server";
 import { listEvents } from "../../../lib/google/calendar";
+
+const supabase = createClient(Astro.request, Astro.cookies);
 
 function todayFortaleza(): string {
   return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -62,8 +65,20 @@ const rangeStart = new Date(`${gridStart}T00:00:00-03:00`);
 const rangeEnd = new Date(`${addDays(gridEnd, 1)}T00:00:00-03:00`);
 const events = await listEvents(rangeStart, rangeEnd);
 
-const countsByDate = new Map<string, { active: number; cancelled: number }>();
-for (const date of gridDates) countsByDate.set(date, { active: 0, cancelled: 0 });
+const appointmentIds = events
+  .map((event) => event.extendedProperties?.private?.appointment_id)
+  .filter((id): id is string => Boolean(id));
+
+// Consulta/exame são jornadas separadas (set/2026) — a contagem do mês
+// mostra as duas separadas, não um número só de "consultas" que na
+// verdade mistura os dois tipos.
+const { data: appointmentRows } = appointmentIds.length
+  ? await supabase.from("appointments").select("id, appointment_type").in("id", appointmentIds)
+  : { data: [] as { id: string; appointment_type: string }[] };
+const appointmentTypeById = new Map((appointmentRows ?? []).map((a) => [a.id, a.appointment_type]));
+
+const countsByDate = new Map<string, { consultas: number; exames: number; cancelled: number }>();
+for (const date of gridDates) countsByDate.set(date, { consultas: 0, exames: 0, cancelled: 0 });
 for (const event of events) {
   const dateTime = event.start.dateTime;
   if (!dateTime) continue;
@@ -71,8 +86,12 @@ for (const event of events) {
   if (!appointmentId) continue;
   const entry = countsByDate.get(fortalezaDateStr(dateTime));
   if (!entry) continue;
-  if (event.status === "cancelled") entry.cancelled++;
-  else entry.active++;
+  if (event.status === "cancelled") {
+    entry.cancelled++;
+    continue;
+  }
+  if (appointmentTypeById.get(appointmentId) === "exam") entry.exames++;
+  else entry.consultas++;
 }
 
 const currentMonthDates = new Set(gridDates.filter((date) => date >= monthStart && date <= monthEnd));
@@ -140,7 +159,7 @@ for (let i = 0; i < gridDates.length; i += 7) weeks.push(gridDates.slice(i, i + 
           week.map((date) => {
             const inCurrentMonth = currentMonthDates.has(date);
             const isToday = date === today;
-            const counts = countsByDate.get(date) ?? { active: 0, cancelled: 0 };
+            const counts = countsByDate.get(date) ?? { consultas: 0, exames: 0, cancelled: 0 };
             const dayNumber = Number(date.slice(8, 10));
 
             return (
@@ -155,9 +174,14 @@ for (let i = 0; i < gridDates.length; i += 7) weeks.push(gridDates.slice(i, i + 
                 }`}
               >
                 <span class={`text-sm ${inCurrentMonth ? "text-slate-900" : "text-slate-400"}`}>{dayNumber}</span>
-                {counts.active > 0 && (
+                {counts.consultas > 0 && (
                   <span class="w-fit rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
-                    {counts.active} {counts.active === 1 ? "consulta" : "consultas"}
+                    {counts.consultas} {counts.consultas === 1 ? "consulta" : "consultas"}
+                  </span>
+                )}
+                {counts.exames > 0 && (
+                  <span class="w-fit rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                    {counts.exames} {counts.exames === 1 ? "exame" : "exames"}
                   </span>
                 )}
                 {counts.cancelled > 0 && (

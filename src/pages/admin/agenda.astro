@@ -41,6 +41,7 @@ const appointmentsById = new Map((appointments ?? []).map((appointment) => [appo
 const appointmentTypeLabels: Record<string, string> = {
   first_visit: "Consulta",
   return_visit: "Retorno",
+  exam: "Exame",
 };
 
 function formatTime(dateTime: string | undefined): string {
@@ -142,8 +143,9 @@ const sortedEvents = [...events].sort(
                     Resp.: {guardian?.full_name} · {guardian?.phone}
                   </p>
                   <p class="text-slate-500">
-                    {appointmentTypeLabels[appointment.appointment_type] ?? appointment.appointment_type} ·{" "}
-                    {location?.type === "clinic" ? "Consultório" : "Domiciliar"}
+                    {appointment.appointment_type === "exam"
+                      ? appointmentTypeLabels.exam
+                      : `${appointmentTypeLabels[appointment.appointment_type] ?? appointment.appointment_type} · ${location?.type === "clinic" ? "Consultório" : "Domiciliar"}`}
                   </p>
                   {!isCancelled && (
                     <div class="mt-2 flex flex-wrap gap-2">
@@ -159,7 +161,7 @@ const sortedEvents = [...events].sort(
                         data-event-id={event.id}
                         data-appointment-id={appointment.id}
                       >
-                        Cancelar consulta
+                        Cancelar
                       </button>
                     </div>
                   )}
@@ -182,7 +184,7 @@ const sortedEvents = [...events].sort(
 <script>
   document.querySelectorAll(".cancel-appointment-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Cancelar esta consulta? O horário volta a ficar livre na agenda.")) return;
+      if (!confirm("Cancelar este agendamento? O horário volta a ficar livre na agenda.")) return;
 
       const button = btn as HTMLButtonElement;
       const eventId = button.dataset.eventId!;
@@ -201,8 +203,8 @@ const sortedEvents = [...events].sort(
         window.location.reload();
       } else {
         button.disabled = false;
-        button.textContent = "Cancelar consulta";
-        alert("Não foi possível cancelar a consulta. Tente novamente.");
+        button.textContent = "Cancelar";
+        alert("Não foi possível cancelar. Tente novamente.");
       }
     });
   });
