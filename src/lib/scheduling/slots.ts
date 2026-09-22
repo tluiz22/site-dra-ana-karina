@@ -1,4 +1,10 @@
 export interface AvailabilityWindow {
+  // A qual consultório físico essa janela pertence — pode haver mais de um
+  // local type='clinic' (2 consultórios com endereços diferentes, set/2026);
+  // cada horário oferecido carrega o consultório físico de origem, decidido
+  // pela combinação dia/horário, não escolhido de antemão (ver "Backlog
+  // futuro — Múltiplos consultórios" no plano).
+  clinic_location_id: string;
   start_time: string;
   end_time: string;
 }
@@ -11,6 +17,7 @@ export interface BusyInterval {
 export interface AvailableSlot {
   start: Date;
   label: string;
+  clinicLocationId: string;
 }
 
 function timeToMinutes(time: string): number {
@@ -55,6 +62,7 @@ export type AppointmentType = "first_visit" | "return_visit" | "exam";
 interface MinuteGap {
   start: number;
   end: number;
+  clinicLocationId: string;
 }
 
 /** No máximo 4 sugestões para consulta de retorno, para não afogar a secretária de opções. */
@@ -93,13 +101,21 @@ export function computeAvailableSlots({
     ) {
       const slotStart = dayStart + slotStartMinutes * 60_000;
       if (slotStart > Date.now()) {
-        result.push({ start: new Date(slotStart), label: formatMinutes(slotStartMinutes) });
+        result.push({
+          start: new Date(slotStart),
+          label: formatMinutes(slotStartMinutes),
+          clinicLocationId: gap.clinicLocationId,
+        });
       }
     }
     return result;
   }
 
   // Intervalos livres dentro das janelas de atendimento, já descontando o que está ocupado (+ buffer).
+  // Janelas de consultórios físicos diferentes nunca se sobrepõem na prática
+  // (a médica só pode estar num lugar por vez, e ela mesma configura os dias/
+  // horários de cada consultório em Disponibilidade) — por isso não há
+  // conflito real de "qual consultório" nesse merge, só união.
   const gaps: MinuteGap[] = [];
   for (const window of windows) {
     const windowStartMinutes = timeToMinutes(window.start_time);
@@ -108,11 +124,13 @@ export function computeAvailableSlots({
     let cursor = windowStartMinutes;
     for (const busyInterval of mergedBusy) {
       const gapEnd = Math.min(busyInterval.start, windowEndMinutes);
-      if (gapEnd > cursor) gaps.push({ start: cursor, end: gapEnd });
+      if (gapEnd > cursor) gaps.push({ start: cursor, end: gapEnd, clinicLocationId: window.clinic_location_id });
       cursor = Math.max(cursor, Math.min(busyInterval.end, windowEndMinutes));
       if (cursor >= windowEndMinutes) break;
     }
-    if (cursor < windowEndMinutes) gaps.push({ start: cursor, end: windowEndMinutes });
+    if (cursor < windowEndMinutes) {
+      gaps.push({ start: cursor, end: windowEndMinutes, clinicLocationId: window.clinic_location_id });
+    }
   }
 
   if (appointmentType === "first_visit") {
@@ -139,7 +157,11 @@ export function computeAvailableSlots({
     if (gapDuration < firstVisitDurationMinutes) {
       prioritySlots.push(...slotsFromGap(gap, returnVisitDurationMinutes));
     } else {
-      const leftover: MinuteGap = { start: gap.start + firstVisitDurationMinutes, end: gap.end };
+      const leftover: MinuteGap = {
+        start: gap.start + firstVisitDurationMinutes,
+        end: gap.end,
+        clinicLocationId: gap.clinicLocationId,
+      };
       leftoverSlots.push(...slotsFromGap(leftover, returnVisitDurationMinutes));
     }
   }

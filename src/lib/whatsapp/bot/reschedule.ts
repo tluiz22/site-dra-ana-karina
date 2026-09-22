@@ -238,13 +238,28 @@ async function finishReschedule(
     return;
   }
 
+  // Remarcar consulta/retorno também deixa a data escolhida decidir o
+  // consultório físico (pode não ser o mesmo de antes) — mesma lógica do
+  // agendamento novo. Exame continua preso ao único local type='exam'.
+  const isExam = appointment.appointment_type === "exam";
+  let locationCategory: "clinic" | "home_visit" | null = null;
+  if (!isExam) {
+    const { data: currentLocation } = await supabase
+      .from("clinic_locations")
+      .select("type")
+      .eq("id", appointment.clinic_location_id)
+      .maybeSingle();
+    locationCategory = currentLocation?.type === "home_visit" ? "home_visit" : "clinic";
+  }
+
   const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString();
   const { data: link, error } = await supabase
     .from("booking_links")
     .insert({
       guardian_id: guardianId,
       patient_id: appointment.patient_id,
-      clinic_location_id: appointment.clinic_location_id,
+      clinic_location_id: isExam ? appointment.clinic_location_id : null,
+      location_category: locationCategory,
       appointment_type: appointment.appointment_type,
       exam_type_id: appointment.exam_type_id,
       mode: "reschedule",

@@ -7,13 +7,15 @@ export type { AppointmentType };
 
 export async function getAvailableSlotsForDate({
   supabase,
-  clinicLocationId,
+  clinicLocationIds,
   date,
   appointmentType,
   examDurationMinutes,
 }: {
   supabase: SupabaseClient;
-  clinicLocationId: string;
+  // Um ou mais `clinic_location_id` (mais de um consultório físico type=
+  // 'clinic' são mesclados — ver resolveClinicLocationIds.ts).
+  clinicLocationIds: string[];
   date: string;
   appointmentType: AppointmentType;
   examDurationMinutes?: number;
@@ -21,14 +23,15 @@ export async function getAvailableSlotsForDate({
   // Nunca oferece horário em feriado nacional — nem sugerido, nem escolhido
   // manualmente (ex.: admin tentando marcar direto numa data de feriado).
   if (isNationalHoliday(date)) return [];
+  if (clinicLocationIds.length === 0) return [];
 
   const weekday = new Date(`${date}T00:00:00-03:00`).getUTCDay();
 
   const [{ data: windows }, { data: settings }] = await Promise.all([
     supabase
       .from("availability_windows")
-      .select("start_time, end_time")
-      .eq("clinic_location_id", clinicLocationId)
+      .select("clinic_location_id, start_time, end_time")
+      .in("clinic_location_id", clinicLocationIds)
       .eq("weekday", weekday)
       .eq("is_active", true)
       .order("start_time"),

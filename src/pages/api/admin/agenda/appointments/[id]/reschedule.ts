@@ -2,27 +2,34 @@ import type { APIRoute } from "astro";
 import { createClient } from "../../../../../../lib/supabase/server";
 import { rescheduleEvent } from "../../../../../../lib/google/calendar";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../../../../lib/scheduling/getAvailableSlotsForDate";
+import { resolveClinicLocationIds, type LocationCategory } from "../../../../../../lib/scheduling/resolveClinicLocationIds";
 import { sendAppointmentReschedule } from "../../../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ params, request, cookies, redirect }) => {
   const { id } = params;
   const formData = await request.formData();
-  const clinicLocationId = formData.get("clinic_location_id")?.toString();
+  const locationCategoryRaw = formData.get("location_category")?.toString();
   const date = formData.get("date")?.toString();
   const appointmentTypeRaw = formData.get("appointment_type")?.toString();
-  const start = formData.get("start")?.toString();
+  // O rádio de horário carrega "<iso>|<clinicLocationId>" — o consultório
+  // físico específico (entre os que a categoria escolhida engloba) já vem
+  // decidido pelo horário escolhido; revalidamos contra a lista recalculada
+  // no servidor e usamos o clinicLocationId QUE ELA devolve.
+  const startParam = formData.get("start")?.toString();
+  const startIso = startParam?.split("|")[0];
 
   const appointmentType: AppointmentType | null =
     appointmentTypeRaw === "first_visit" || appointmentTypeRaw === "return_visit"
       ? appointmentTypeRaw
       : null;
+  const locationCategory: LocationCategory = locationCategoryRaw === "home_visit" ? "home_visit" : "clinic";
 
   const back = (error: string) =>
     redirect(
-      `/admin/agenda/remarcar?appointment_id=${id}&clinic_location_id=${clinicLocationId ?? ""}&date=${date ?? ""}&appointment_type=${appointmentType ?? "first_visit"}&error=${error}`
+      `/admin/agenda/remarcar?appointment_id=${id}&location_category=${locationCategory}&date=${date ?? ""}&appointment_type=${appointmentType ?? "first_visit"}&error=${error}`
     );
 
-  if (!id || !clinicLocationId || !date || !start || !appointmentType) {
+  if (!id || !date || !startIso || !appointmentType) {
     return back("1");
   }
 
@@ -38,19 +45,22 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
     return back("1");
   }
 
+  const clinicLocationIds = await resolveClinicLocationIds(supabase, locationCategory);
+
   const [{ data: settings }, slots] = await Promise.all([
     supabase.from("appointment_settings").select("*").eq("id", 1).single(),
-    getAvailableSlotsForDate({ supabase, clinicLocationId, date, appointmentType }),
+    getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType }),
   ]);
 
   if (!settings) {
     return back("1");
   }
 
-  const matchedSlot = slots.find((slot) => slot.start.toISOString() === start);
+  const matchedSlot = slots.find((slot) => slot.start.toISOString() === startIso);
   if (!matchedSlot) {
     return back("slot_taken");
   }
+  const clinicLocationId = matchedSlot.clinicLocationId;
 
   const durationMinutes =
     appointmentType === "return_visit"

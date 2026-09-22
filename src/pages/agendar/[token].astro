@@ -4,6 +4,7 @@ import Footer from "../../components/Footer.astro";
 import { createServiceClient } from "../../lib/supabase/service";
 import { getNextAvailableDates } from "../../lib/scheduling/getNextAvailableDates";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../lib/scheduling/getAvailableSlotsForDate";
+import { resolveClinicLocationIds } from "../../lib/scheduling/resolveClinicLocationIds";
 
 const { token } = Astro.params;
 const supabase = createServiceClient();
@@ -12,11 +13,10 @@ const { data: link } = token
   ? await supabase
       .from("booking_links")
       .select(
-        `id, mode, appointment_type, clinic_location_id, expires_at, used_at,
+        `id, mode, appointment_type, clinic_location_id, location_category, expires_at, used_at,
          guardians ( full_name, phone ),
          patients ( full_name, birthdate ),
-         clinic_locations ( name, type ),
-         appointments ( scheduled_at ),
+         appointments ( scheduled_at, clinic_locations ( name, type, address ) ),
          exam_types ( name, duration_minutes, preparation_instructions )`
       )
       .eq("id", token)
@@ -35,15 +35,30 @@ const state: PageState = !link
 
 const guardian = (link?.guardians ?? null) as unknown as { full_name: string; phone: string } | null;
 const patient = (link?.patients ?? null) as unknown as { full_name: string; birthdate: string } | null;
-const location = (link?.clinic_locations ?? null) as unknown as { name: string; type: string } | null;
-const currentAppointment = (link?.appointments ?? null) as unknown as { scheduled_at: string } | null;
+// Populado em modo "reschedule" (a consulta/exame sendo remarcado) e depois
+// de confirmar em modo "create" (o agendamento recém-criado) — nos dois
+// casos já existe um `clinic_location_id` resolvido para um local físico
+// específico (diferente do link em si, que só sabe a categoria antes de
+// confirmar; ver "Backlog futuro — Múltiplos consultórios" no plano).
+const currentAppointment = (link?.appointments ?? null) as unknown as {
+  scheduled_at: string;
+  clinic_locations: { name: string; type: string; address: string | null } | null;
+} | null;
 const examType = (link?.exam_types ?? null) as unknown as {
   name: string;
   duration_minutes: number;
   preparation_instructions: string | null;
 } | null;
-const locationLabel =
-  location?.type === "clinic" ? "Consultório" : location?.type === "exam" ? "Exames" : "Atendimento domiciliar";
+
+function categoryLabel(type: string | undefined | null): string {
+  return type === "home_visit" ? "Atendimento domiciliar" : type === "exam" ? "Exames" : "Consultório";
+}
+
+// Antes de confirmar: só sabemos a categoria (Consultório/Domiciliar/Exames).
+// Depois de confirmar: sabemos o consultório físico exato.
+const locationLabel = categoryLabel(
+  currentAppointment?.clinic_locations?.type ?? link?.location_category ?? (link?.appointment_type === "exam" ? "exam" : undefined)
+);
 
 function formatDateBR(dateStr: string): string {
   const [year, month, day] = dateStr.split("-");
@@ -76,16 +91,25 @@ function formatDateTimeBR(iso: string): string {
 }
 
 let availableDates: { date: string; weekday: number }[] = [];
-let initialSlots: { start: Date; label: string }[] = [];
+let initialSlots: { start: Date; label: string; clinicLocationId: string }[] = [];
 let selectedDate = "";
 
 if (state === "form" && link) {
   const appointmentType = link.appointment_type as AppointmentType;
   const examDurationMinutes = examType?.duration_minutes;
 
+  // Exame: local único, já resolvido. Consulta/retorno: categoria mesclando
+  // todos os consultórios físicos ativos dela (ver "Backlog futuro" no plano).
+  const clinicLocationIds =
+    appointmentType === "exam"
+      ? link.clinic_location_id
+        ? [link.clinic_location_id]
+        : []
+      : await resolveClinicLocationIds(supabase, (link.location_category as "clinic" | "home_visit") ?? "clinic");
+
   availableDates = await getNextAvailableDates({
     supabase,
-    clinicLocationId: link.clinic_location_id,
+    clinicLocationIds,
     appointmentType,
     examDurationMinutes,
   });
@@ -97,7 +121,7 @@ if (state === "form" && link) {
   if (selectedDate) {
     initialSlots = await getAvailableSlotsForDate({
       supabase,
-      clinicLocationId: link.clinic_location_id,
+      clinicLocationIds,
       date: selectedDate,
       appointmentType,
       examDurationMinutes,
@@ -112,12 +136,11 @@ const errorMessages: Record<string, string> = {
 const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
 
-const pageTitle =
-  link?.mode === "reschedule"
-    ? "Remarcar consulta"
-    : link?.appointment_type === "exam"
-      ? "Marcar exame"
-      : "Agendar consulta";
+const isExam = link?.appointment_type === "exam";
+
+const pageTitle = link?.mode === "reschedule" ? "Remarcar consulta" : isExam ? "Marcar exame" : "Agendar consulta";
+
+const confirmedLocation = currentAppointment?.clinic_locations ?? null;
 ---
 
 <html lang="pt-BR">
@@ -154,7 +177,7 @@ const pageTitle =
       {
         state === "used" && (
           <div class="rounded-md border border-emerald-200 bg-emerald-50 p-6 text-center">
-            <h1 class="text-lg font-bold text-emerald-900">Consulta confirmada!</h1>
+            <h1 class="text-lg font-bold text-emerald-900">{isExam ? "Exame confirmado!" : "Consulta confirmada!"}</h1>
             <p class="mt-2 text-sm text-emerald-800">
               {patient?.full_name}
               {currentAppointment && (
@@ -164,6 +187,13 @@ const pageTitle =
                 </>
               )}
             </p>
+            {confirmedLocation?.address && (
+              <p class="mt-2 text-sm text-emerald-800">
+                {confirmedLocation.name}
+                <br />
+                {confirmedLocation.address}
+              </p>
+            )}
             <p class="mt-4 text-sm text-emerald-800">
               Você também vai receber a confirmação pelo WhatsApp.
             </p>
@@ -189,7 +219,7 @@ const pageTitle =
 
             {link.mode === "reschedule" && currentAppointment && (
               <p class="mt-2 text-sm text-slate-600">
-                Consulta atual: {formatDateTimeBR(currentAppointment.scheduled_at)}
+                {isExam ? "Exame atual" : "Consulta atual"}: {formatDateTimeBR(currentAppointment.scheduled_at)}
               </p>
             )}
 
@@ -225,7 +255,7 @@ const pageTitle =
             >
               <div>
                 <label for="date" class="block text-sm font-medium text-slate-700">
-                  Data da consulta
+                  {isExam ? "Data do exame" : "Data da consulta"}
                 </label>
                 {availableDates.length ? (
                   <select
@@ -248,12 +278,18 @@ const pageTitle =
               </div>
 
               <div>
-                <span class="block text-sm font-medium text-slate-700">Horário da consulta</span>
+                <span class="block text-sm font-medium text-slate-700">{isExam ? "Horário do exame" : "Horário da consulta"}</span>
                 <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
                   {initialSlots.length ? (
                     initialSlots.map((slot) => (
                       <label class="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50">
-                        <input type="radio" name="start" value={slot.start.toISOString()} required class="mr-1" />
+                        <input
+                          type="radio"
+                          name="start"
+                          value={`${slot.start.toISOString()}|${slot.clinicLocationId}`}
+                          required
+                          class="mr-1"
+                        />
                         {slot.label}
                       </label>
                     ))
@@ -269,7 +305,7 @@ const pageTitle =
                 disabled={!availableDates.length}
                 class="w-fit rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Confirmar consulta
+                {isExam ? "Confirmar exame" : "Confirmar consulta"}
               </button>
             </form>
           </>
@@ -313,14 +349,14 @@ const pageTitle =
       }
 
       submitBtn.disabled = false;
-      slots.forEach((slot: { start: string; label: string }) => {
+      slots.forEach((slot: { start: string; label: string; clinicLocationId: string }) => {
         const label = document.createElement("label");
         label.className =
           "cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50";
         const input = document.createElement("input");
         input.type = "radio";
         input.name = "start";
-        input.value = slot.start;
+        input.value = `${slot.start}|${slot.clinicLocationId}`;
         input.required = true;
         input.className = "mr-1";
         label.appendChild(input);

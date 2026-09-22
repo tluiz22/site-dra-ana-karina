@@ -47,7 +47,15 @@ interface PendingPatient {
 
 export interface BookingContext {
   appointment_type?: "first_visit" | "return_visit" | "exam";
+  // Exame: local único, resolvido direto (exam.ts) — clinic_location_id já
+  // é o id real do local type='exam'.
+  // Consulta/retorno: pode haver mais de um consultório físico type='clinic'
+  // (2 endereços, set/2026) — aqui só se escolhe a CATEGORIA
+  // ("clinic"/"home_visit"), nunca um endereço específico; a data/horário
+  // escolhidos na página é que decidem qual consultório físico atende (ver
+  // resolveClinicLocationIds.ts e "Backlog futuro" no plano).
   clinic_location_id?: string;
+  location_category?: "clinic" | "home_visit";
   clinic_location_label?: string;
   // Só preenchidos quando appointment_type === "exam" (case 6 · Marcar
   // exame, ver exam.ts) — carregados até finishBookingWithPatient para
@@ -88,14 +96,15 @@ export async function startBooking(
 ): Promise<void> {
   const { data: locationRows } = await supabase
     .from("clinic_locations")
-    .select("id, name, type")
+    .select("type")
     .eq("is_active", true)
-    .order("type");
+    .neq("type", "exam");
 
-  const options: LocationOption[] = (locationRows ?? []).map((loc) => ({
-    id: loc.id,
-    label: loc.type === "home_visit" ? "Atendimento domiciliar" : loc.name,
-  }));
+  // Categoria, não endereço específico — ver BookingContext.location_category.
+  const types = new Set((locationRows ?? []).map((loc) => loc.type));
+  const options: LocationOption[] = [];
+  if (types.has("clinic")) options.push({ id: "clinic", label: "Consultório" });
+  if (types.has("home_visit")) options.push({ id: "home_visit", label: "Atendimento domiciliar" });
 
   if (options.length === 0) {
     const body = texts.noLocationAvailableText();
@@ -174,7 +183,7 @@ async function handleLocation(
 
   const newContext: BookingContext = {
     appointment_type: context.appointment_type,
-    clinic_location_id: match.id,
+    location_category: match.id as "clinic" | "home_visit",
     clinic_location_label: match.label,
   };
   await updateConversationState(supabase, guardianPhone, "BOOK_PATIENT_SELECT", { context: newContext });
@@ -210,13 +219,20 @@ export async function enterPatientSelect(
     return;
   }
 
+  // Consulta/exame são jornadas separadas (pedido do cliente, set/2026): ao
+  // agendar consulta, só lista crianças com CONSULTA futura marcada; ao
+  // marcar exame, só lista crianças com EXAME futuro marcado — nunca mistura.
+  const appointmentTypeFilter =
+    context.appointment_type === "exam" ? ["exam"] : ["first_visit", "return_visit"];
+
   const nowIso = new Date().toISOString();
   const { data: rows } = await supabase
     .from("patients")
-    .select("id, full_name, appointments!inner(status, scheduled_at)")
+    .select("id, full_name, appointments!inner(status, scheduled_at, appointment_type)")
     .eq("guardian_id", guardianId)
     .eq("is_active", true)
     .in("appointments.status", ["scheduled", "confirmed"])
+    .in("appointments.appointment_type", appointmentTypeFilter)
     .gt("appointments.scheduled_at", nowIso);
 
   const candidates = dedupePatients(rows ?? []);
@@ -307,7 +323,10 @@ async function askNewPatientName(
   const cleanContext: BookingContext = {
     appointment_type: context.appointment_type,
     clinic_location_id: context.clinic_location_id,
+    location_category: context.location_category,
     clinic_location_label: context.clinic_location_label,
+    exam_type_id: context.exam_type_id,
+    exam_type_name: context.exam_type_name,
     awaiting: "new_patient_name",
     known_birthdate: knownBirthdate,
   };
@@ -554,7 +573,10 @@ async function finishBookingWithPatient(
   patientId: string,
   patientName: string
 ): Promise<void> {
-  if (!guardianId || !context.clinic_location_id || !context.appointment_type) {
+  const isExam = context.appointment_type === "exam";
+  const hasLocation = isExam ? !!context.clinic_location_id : !!context.location_category;
+
+  if (!guardianId || !hasLocation || !context.appointment_type) {
     console.error("[whatsapp bot] contexto de agendamento incompleto ao gerar o link:", context);
     await sendBookingLinkError(supabase, guardianPhone, guardianId);
     return;
@@ -566,12 +588,24 @@ async function finishBookingWithPatient(
   // criança que já tem consulta futura marcada (achado em teste real: a
   // lista de "outra criança" não é filtrada por consulta futura, diferente
   // da lista inicial de até 3 candidatos).
-  const { data: existingAppointment } = await supabase
+  //
+  // Consulta/exame são jornadas separadas (pedido do cliente, set/2026): um
+  // paciente pode ter uma consulta E um exame futuros ao mesmo tempo — só
+  // não pode ter dois agendamentos futuros do MESMO tipo (duas consultas/
+  // retornos, ou o mesmo tipo de exame duas vezes).
+  let duplicateQuery = supabase
     .from("appointments")
     .select("scheduled_at")
     .eq("patient_id", patientId)
     .in("status", ["scheduled", "confirmed"])
-    .gt("scheduled_at", new Date().toISOString())
+    .gt("scheduled_at", new Date().toISOString());
+
+  duplicateQuery =
+    context.appointment_type === "exam"
+      ? duplicateQuery.eq("appointment_type", "exam").eq("exam_type_id", context.exam_type_id ?? "")
+      : duplicateQuery.in("appointment_type", ["first_visit", "return_visit"]);
+
+  const { data: existingAppointment } = await duplicateQuery
     .order("scheduled_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -595,7 +629,8 @@ async function finishBookingWithPatient(
     .insert({
       guardian_id: guardianId,
       patient_id: patientId,
-      clinic_location_id: context.clinic_location_id,
+      clinic_location_id: isExam ? context.clinic_location_id : null,
+      location_category: isExam ? null : context.location_category,
       appointment_type: context.appointment_type,
       exam_type_id: context.exam_type_id ?? null,
       mode: "create",

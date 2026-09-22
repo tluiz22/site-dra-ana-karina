@@ -2,17 +2,24 @@ import type { APIRoute } from "astro";
 import { createServiceClient } from "../../../../lib/supabase/service";
 import { createEvent, rescheduleEvent } from "../../../../lib/google/calendar";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../../lib/scheduling/getAvailableSlotsForDate";
+import { resolveClinicLocationIds, type LocationCategory } from "../../../../lib/scheduling/resolveClinicLocationIds";
 import { sendAppointmentConfirmation, sendAppointmentReschedule } from "../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ params, request, redirect }) => {
   const token = params.token;
   const formData = await request.formData();
   const date = formData.get("date")?.toString();
-  const start = formData.get("start")?.toString();
+  // O rádio de horário carrega "<iso>|<clinicLocationId>" — o consultório
+  // físico específico (entre os que a categoria escolhida engloba) já vem
+  // decidido pelo horário escolhido, não é reconferido aqui: revalidamos
+  // contra a lista de horários recalculada no servidor e usamos o
+  // clinicLocationId QUE ELA devolve, nunca o que o cliente mandou.
+  const startParam = formData.get("start")?.toString();
+  const startIso = startParam?.split("|")[0];
 
   const back = (error: string) => redirect(`/agendar/${token}?date=${date ?? ""}&error=${error}`);
 
-  if (!token || !date || !start) {
+  if (!token || !date || !startIso) {
     return back("1");
   }
 
@@ -38,11 +45,21 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     preparation_instructions: string | null;
   } | null;
 
+  // Exame: local único, já resolvido. Consulta/retorno: categoria mesclando
+  // todos os consultórios físicos ativos dela (ver "Backlog futuro" no
+  // plano) — o horário escolhido decide qual deles atende.
+  const clinicLocationIds =
+    appointmentType === "exam"
+      ? link.clinic_location_id
+        ? [link.clinic_location_id]
+        : []
+      : await resolveClinicLocationIds(supabase, (link.location_category as LocationCategory) ?? "clinic");
+
   const [{ data: settings }, slots] = await Promise.all([
     supabase.from("appointment_settings").select("*").eq("id", 1).single(),
     getAvailableSlotsForDate({
       supabase,
-      clinicLocationId: link.clinic_location_id,
+      clinicLocationIds,
       date,
       appointmentType,
       examDurationMinutes: examType?.duration_minutes,
@@ -53,10 +70,11 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     return back("1");
   }
 
-  const matchedSlot = slots.find((slot) => slot.start.toISOString() === start);
+  const matchedSlot = slots.find((slot) => slot.start.toISOString() === startIso);
   if (!matchedSlot) {
     return back("slot_taken");
   }
+  const resolvedClinicLocationId = matchedSlot.clinicLocationId;
 
   const durationMinutes =
     appointmentType === "exam"
@@ -77,7 +95,7 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     supabase
       .from("clinic_locations")
       .select("type, address, price_first_visit_cents")
-      .eq("id", link.clinic_location_id)
+      .eq("id", resolvedClinicLocationId)
       .single(),
   ]);
 
@@ -116,7 +134,7 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     await supabase
       .from("appointments")
       .update({
-        clinic_location_id: link.clinic_location_id,
+        clinic_location_id: resolvedClinicLocationId,
         scheduled_at: startDate.toISOString(),
         duration_minutes: durationMinutes,
         appointment_type: appointmentType,
@@ -145,16 +163,23 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
       });
     }
   } else {
-    // Mesma trava do admin: bloqueia um segundo agendamento futuro ativo
-    // para o mesmo paciente.
-    const { data: existingFutureAppointment } = await supabase
+    // Mesma trava do admin, agora por categoria (consulta/exame são
+    // jornadas separadas, set/2026): bloqueia um segundo agendamento futuro
+    // do MESMO tipo — duas consultas/retornos, ou o mesmo tipo de exame
+    // duas vezes — mas permite consulta e exame simultâneos.
+    let duplicateQuery = supabase
       .from("appointments")
       .select("id")
       .eq("patient_id", link.patient_id)
       .in("status", ["scheduled", "confirmed"])
-      .gt("scheduled_at", new Date().toISOString())
-      .limit(1)
-      .maybeSingle();
+      .gt("scheduled_at", new Date().toISOString());
+
+    duplicateQuery =
+      appointmentType === "exam"
+        ? duplicateQuery.eq("appointment_type", "exam").eq("exam_type_id", link.exam_type_id ?? "")
+        : duplicateQuery.in("appointment_type", ["first_visit", "return_visit"]);
+
+    const { data: existingFutureAppointment } = await duplicateQuery.limit(1).maybeSingle();
 
     if (existingFutureAppointment) {
       return back("1");
@@ -164,7 +189,7 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
       .from("appointments")
       .insert({
         patient_id: link.patient_id,
-        clinic_location_id: link.clinic_location_id,
+        clinic_location_id: resolvedClinicLocationId,
         scheduled_at: startDate.toISOString(),
         duration_minutes: durationMinutes,
         appointment_type: appointmentType,

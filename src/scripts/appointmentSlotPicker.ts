@@ -1,4 +1,4 @@
-const locationSelect = document.getElementById("clinic_location_id") as HTMLSelectElement;
+const locationSelect = document.getElementById("location_category") as HTMLSelectElement;
 const dateInput = document.getElementById("date") as HTMLInputElement;
 const typeSelect = document.getElementById("appointment_type") as HTMLSelectElement;
 const slotsContainer = document.getElementById("slots_container") as HTMLDivElement;
@@ -37,7 +37,7 @@ async function refreshSlots() {
   slotsContainer.innerHTML = '<p class="text-sm text-slate-500">Carregando horários…</p>';
 
   const params = new URLSearchParams({
-    clinic_location_id: locationSelect.value,
+    location_category: locationSelect.value,
     date: dateInput.value,
     appointment_type: typeSelect.value,
   });
@@ -52,14 +52,14 @@ async function refreshSlots() {
     return;
   }
 
-  slots.forEach((slot: { start: string; label: string }) => {
+  slots.forEach((slot: { start: string; label: string; clinicLocationId: string }) => {
     const label = document.createElement("label");
     label.className =
       "cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50";
     const input = document.createElement("input");
     input.type = "radio";
     input.name = "start";
-    input.value = slot.start;
+    input.value = `${slot.start}|${slot.clinicLocationId}`;
     input.required = true;
     input.className = "mr-1";
     label.appendChild(input);

@@ -15,7 +15,7 @@ export const GET: APIRoute = async ({ url, request, cookies }) => {
   }
 
   const supabase = createClient(request, cookies);
-  const dates = await getNextAvailableDates({ supabase, clinicLocationId, appointmentType });
+  const dates = await getNextAvailableDates({ supabase, clinicLocationIds: [clinicLocationId], appointmentType });
 
   return new Response(JSON.stringify({ dates }), { headers: { "Content-Type": "application/json" } });
 };

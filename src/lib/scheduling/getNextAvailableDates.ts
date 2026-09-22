@@ -30,24 +30,28 @@ function addDays(dateStr: string, delta: number): string {
  */
 export async function getNextAvailableDates({
   supabase,
-  clinicLocationId,
+  clinicLocationIds,
   appointmentType,
   examDurationMinutes,
   count = DEFAULT_DATE_COUNT,
   maxDaysAhead = MAX_DAYS_AHEAD,
 }: {
   supabase: SupabaseClient;
-  clinicLocationId: string;
+  // Um ou mais `clinic_location_id` (mais de um consultório físico type=
+  // 'clinic' são mesclados — ver resolveClinicLocationIds.ts).
+  clinicLocationIds: string[];
   appointmentType: AppointmentType;
   examDurationMinutes?: number;
   count?: number;
   maxDaysAhead?: number;
 }): Promise<AvailableDate[]> {
+  if (clinicLocationIds.length === 0) return [];
+
   const [{ data: windows }, { data: settings }] = await Promise.all([
     supabase
       .from("availability_windows")
-      .select("weekday, start_time, end_time")
-      .eq("clinic_location_id", clinicLocationId)
+      .select("clinic_location_id, weekday, start_time, end_time")
+      .in("clinic_location_id", clinicLocationIds)
       .eq("is_active", true)
       .order("start_time"),
     supabase.from("appointment_settings").select("*").eq("id", 1).single(),
