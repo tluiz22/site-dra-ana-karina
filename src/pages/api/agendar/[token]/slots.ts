@@ -17,7 +17,7 @@ export const GET: APIRoute = async ({ params, url }) => {
 
   const { data: link } = await supabase
     .from("booking_links")
-    .select("clinic_location_id, appointment_type, used_at, expires_at")
+    .select("clinic_location_id, appointment_type, used_at, expires_at, exam_types ( duration_minutes )")
     .eq("id", token)
     .maybeSingle();
 
@@ -28,11 +28,14 @@ export const GET: APIRoute = async ({ params, url }) => {
     });
   }
 
+  const examType = link.exam_types as unknown as { duration_minutes: number } | null;
+
   const slots = await getAvailableSlotsForDate({
     supabase,
     clinicLocationId: link.clinic_location_id,
     date,
     appointmentType: link.appointment_type as AppointmentType,
+    examDurationMinutes: examType?.duration_minutes,
   });
 
   return new Response(

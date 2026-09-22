@@ -16,7 +16,8 @@ const { data: link } = token
          guardians ( full_name, phone ),
          patients ( full_name, birthdate ),
          clinic_locations ( name, type ),
-         appointments ( scheduled_at )`
+         appointments ( scheduled_at ),
+         exam_types ( name, duration_minutes, preparation_instructions )`
       )
       .eq("id", token)
       .maybeSingle()
@@ -36,7 +37,13 @@ const guardian = (link?.guardians ?? null) as unknown as { full_name: string; ph
 const patient = (link?.patients ?? null) as unknown as { full_name: string; birthdate: string } | null;
 const location = (link?.clinic_locations ?? null) as unknown as { name: string; type: string } | null;
 const currentAppointment = (link?.appointments ?? null) as unknown as { scheduled_at: string } | null;
-const locationLabel = location?.type === "clinic" ? "Consultório" : "Atendimento domiciliar";
+const examType = (link?.exam_types ?? null) as unknown as {
+  name: string;
+  duration_minutes: number;
+  preparation_instructions: string | null;
+} | null;
+const locationLabel =
+  location?.type === "clinic" ? "Consultório" : location?.type === "exam" ? "Exames" : "Atendimento domiciliar";
 
 function formatDateBR(dateStr: string): string {
   const [year, month, day] = dateStr.split("-");
@@ -74,11 +81,13 @@ let selectedDate = "";
 
 if (state === "form" && link) {
   const appointmentType = link.appointment_type as AppointmentType;
+  const examDurationMinutes = examType?.duration_minutes;
 
   availableDates = await getNextAvailableDates({
     supabase,
     clinicLocationId: link.clinic_location_id,
     appointmentType,
+    examDurationMinutes,
   });
 
   const dateParam = Astro.url.searchParams.get("date");
@@ -91,6 +100,7 @@ if (state === "form" && link) {
       clinicLocationId: link.clinic_location_id,
       date: selectedDate,
       appointmentType,
+      examDurationMinutes,
     });
   }
 }
@@ -102,7 +112,12 @@ const errorMessages: Record<string, string> = {
 const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
 
-const pageTitle = link?.mode === "reschedule" ? "Remarcar consulta" : "Agendar consulta";
+const pageTitle =
+  link?.mode === "reschedule"
+    ? "Remarcar consulta"
+    : link?.appointment_type === "exam"
+      ? "Marcar exame"
+      : "Agendar consulta";
 ---
 
 <html lang="pt-BR">
@@ -167,12 +182,20 @@ const pageTitle = link?.mode === "reschedule" ? "Remarcar consulta" : "Agendar c
           <>
             <h1 class="text-2xl font-bold text-slate-900">{pageTitle}</h1>
             <p class="mt-1 text-sm text-slate-600">
-              {locationLabel} · {link.appointment_type === "return_visit" ? "Retorno" : "Consulta"}
+              {link.appointment_type === "exam"
+                ? examType?.name ?? "Exame"
+                : `${locationLabel} · ${link.appointment_type === "return_visit" ? "Retorno" : "Consulta"}`}
             </p>
 
             {link.mode === "reschedule" && currentAppointment && (
               <p class="mt-2 text-sm text-slate-600">
                 Consulta atual: {formatDateTimeBR(currentAppointment.scheduled_at)}
+              </p>
+            )}
+
+            {link.appointment_type === "exam" && examType?.preparation_instructions && (
+              <p class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <strong>Preparo:</strong> {examType.preparation_instructions}
               </p>
             )}
 
@@ -253,7 +276,7 @@ const pageTitle = link?.mode === "reschedule" ? "Remarcar consulta" : "Agendar c
         )
       }
     </main>
-    <Footer />
+    <Footer hideAddress />
   </body>
 </html>
 

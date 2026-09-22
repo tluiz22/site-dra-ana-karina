@@ -1,12 +1,13 @@
-// Roteador da máquina de estados do bot de WhatsApp (Fase 3b).
+// Roteador da máquina de estados do bot de WhatsApp (Fase 3b/6).
 //
 // Chamado pelo webhook (`src/pages/api/whatsapp/webhook.ts`) para cada
 // mensagem inbound do paciente, depois que ela já foi registrada em
-// `whatsapp_messages`. Cobre WELCOME → MENU → INFO_MENU e MENU → HUMAN_HANDOFF
-// ("Falar com secretária" é opção do menu principal, não do submenu de
-// Informações — pedido do cliente) e delega os estados de Agendar (case 1,
-// `./booking.ts`), Cancelar (case 2, `./cancel.ts`) e Remarcar (case 3,
-// `./reschedule.ts`) — os quatro cases do menu principal completos.
+// `whatsapp_messages`. Menu principal com 4 grupos (Consultas, Exames,
+// Informações gerais, Falar com secretária — reorganizado em set/2026 a
+// partir das 7 opções soltas de antes): MENU → CONSULTAS_MENU/EXAMES_MENU/
+// INFO_MENU, e MENU → HUMAN_HANDOFF direto. Delega os estados de Agendar
+// (case 1, `./booking.ts`), Cancelar (case 2, `./cancel.ts`), Remarcar
+// (case 3, `./reschedule.ts`) e Marcar exame (case 6, `./exam.ts`).
 //
 // Nunca lança: erros de uma etapa não devem impedir o webhook de responder
 // 200 rápido para a Meta.
@@ -28,6 +29,7 @@ import {
 import { BOOKING_STATES, handleBookingState, startBooking } from "./booking";
 import { CANCEL_STATES, handleCancelState, startCancel } from "./cancel";
 import { RESCHEDULE_STATES, handleRescheduleState, startReschedule } from "./reschedule";
+import { EXAM_STATES, handleExamState, startExam } from "./exam";
 import * as texts from "./messages";
 
 interface ConversationStateRow {
@@ -125,12 +127,23 @@ export async function routeIncomingMessage(
     return;
   }
 
+  if (EXAM_STATES.has(convo.state)) {
+    await handleExamState(supabase, guardianPhone, guardianId, context, selection);
+    return;
+  }
+
   switch (convo.state) {
     case "WELCOME":
       await handleWelcome(supabase, guardianPhone, guardianId);
       return;
     case "MENU":
       await handleMenu(supabase, guardianPhone, guardianId, selection);
+      return;
+    case "CONSULTAS_MENU":
+      await handleConsultasMenu(supabase, guardianPhone, guardianId, selection);
+      return;
+    case "EXAMES_MENU":
+      await handleExamesMenu(supabase, guardianPhone, guardianId, selection);
       return;
     case "INFO_MENU":
       await handleInfoMenu(supabase, guardianPhone, guardianId, selection);
@@ -178,6 +191,38 @@ async function sendInfoMenu(
   );
 }
 
+async function sendConsultasMenu(
+  supabase: SupabaseClient,
+  guardianPhone: string,
+  guardianId: string | null
+): Promise<void> {
+  const body = texts.consultasMenuBodyText();
+  await sendAndLog(supabase, guardianId, "bot_consultas_menu", body, () =>
+    sendInteractiveListMessage({
+      to: guardianPhone,
+      bodyText: body,
+      buttonText: "Escolher opção",
+      sections: texts.consultasMenuSections(),
+    })
+  );
+}
+
+async function sendExamesMenu(
+  supabase: SupabaseClient,
+  guardianPhone: string,
+  guardianId: string | null
+): Promise<void> {
+  const body = texts.examesMenuBodyText();
+  await sendAndLog(supabase, guardianId, "bot_exames_menu", body, () =>
+    sendInteractiveListMessage({
+      to: guardianPhone,
+      bodyText: body,
+      buttonText: "Escolher opção",
+      sections: texts.examesMenuSections(),
+    })
+  );
+}
+
 // --- WELCOME --------------------------------------------------------------
 
 async function handleWelcome(
@@ -201,33 +246,25 @@ async function handleMenu(
   guardianId: string | null,
   selection: Selection
 ): Promise<void> {
-  if (matchesOption(selection, "1", texts.MENU_LIST_ID.agendarConsulta)) {
-    await startBooking(supabase, guardianPhone, guardianId, "first_visit");
+  if (matchesOption(selection, "1", texts.MENU_LIST_ID.consultas)) {
+    await sendConsultasMenu(supabase, guardianPhone, guardianId);
+    await updateConversationState(supabase, guardianPhone, "CONSULTAS_MENU");
     return;
   }
 
-  if (matchesOption(selection, "2", texts.MENU_LIST_ID.agendarRetorno)) {
-    await startBooking(supabase, guardianPhone, guardianId, "return_visit");
+  if (matchesOption(selection, "2", texts.MENU_LIST_ID.exames)) {
+    await sendExamesMenu(supabase, guardianPhone, guardianId);
+    await updateConversationState(supabase, guardianPhone, "EXAMES_MENU");
     return;
   }
 
-  if (matchesOption(selection, "3", texts.MENU_LIST_ID.cancelar)) {
-    await startCancel(supabase, guardianPhone, guardianId);
-    return;
-  }
-
-  if (matchesOption(selection, "4", texts.MENU_LIST_ID.remarcar)) {
-    await startReschedule(supabase, guardianPhone, guardianId);
-    return;
-  }
-
-  if (matchesOption(selection, "5", texts.MENU_LIST_ID.informacoes)) {
+  if (matchesOption(selection, "3", texts.MENU_LIST_ID.informacoes)) {
     await sendInfoMenu(supabase, guardianPhone, guardianId);
     await updateConversationState(supabase, guardianPhone, "INFO_MENU");
     return;
   }
 
-  if (matchesOption(selection, "6", texts.MENU_LIST_ID.secretaria)) {
+  if (matchesOption(selection, "4", texts.MENU_LIST_ID.secretaria)) {
     const body = texts.handoffText();
     await sendAndLog(supabase, guardianId, "bot_handoff", body, () =>
       sendTextMessage({ to: guardianPhone, body })
@@ -243,6 +280,71 @@ async function handleMenu(
   await sendMenu(supabase, guardianPhone, guardianId);
 }
 
+// --- CONSULTAS_MENU ---------------------------------------------------
+
+async function handleConsultasMenu(
+  supabase: SupabaseClient,
+  guardianPhone: string,
+  guardianId: string | null,
+  selection: Selection
+): Promise<void> {
+  if (matchesOption(selection, "1", texts.CONSULTAS_LIST_ID.agendarConsulta)) {
+    await startBooking(supabase, guardianPhone, guardianId, "first_visit");
+    return;
+  }
+
+  if (matchesOption(selection, "2", texts.CONSULTAS_LIST_ID.agendarRetorno)) {
+    await startBooking(supabase, guardianPhone, guardianId, "return_visit");
+    return;
+  }
+
+  if (matchesOption(selection, "3", texts.CONSULTAS_LIST_ID.cancelar)) {
+    await startCancel(supabase, guardianPhone, guardianId);
+    return;
+  }
+
+  if (matchesOption(selection, "4", texts.CONSULTAS_LIST_ID.remarcar)) {
+    await startReschedule(supabase, guardianPhone, guardianId);
+    return;
+  }
+
+  const notUnderstood = texts.notUnderstoodText();
+  await sendAndLog(supabase, guardianId, "bot_not_understood", notUnderstood, () =>
+    sendTextMessage({ to: guardianPhone, body: notUnderstood })
+  );
+  await sendConsultasMenu(supabase, guardianPhone, guardianId);
+}
+
+// --- EXAMES_MENU --------------------------------------------------------
+
+async function handleExamesMenu(
+  supabase: SupabaseClient,
+  guardianPhone: string,
+  guardianId: string | null,
+  selection: Selection
+): Promise<void> {
+  if (matchesOption(selection, "1", texts.EXAMES_LIST_ID.marcar)) {
+    await startExam(supabase, guardianPhone, guardianId);
+    return;
+  }
+
+  if (matchesOption(selection, "2", texts.EXAMES_LIST_ID.cancelar)) {
+    await startCancel(supabase, guardianPhone, guardianId);
+    return;
+  }
+
+  if (matchesOption(selection, "3", texts.EXAMES_LIST_ID.remarcar)) {
+    await startReschedule(supabase, guardianPhone, guardianId);
+    return;
+  }
+
+  const notUnderstood = texts.notUnderstoodText();
+  await sendAndLog(supabase, guardianId, "bot_not_understood", notUnderstood, () =>
+    sendTextMessage({ to: guardianPhone, body: notUnderstood })
+  );
+  await sendExamesMenu(supabase, guardianPhone, guardianId);
+}
+
 // --- INFO_MENU (case 4 · Informações Gerais) -------------------------------
 
 async function handleInfoMenu(
@@ -252,11 +354,15 @@ async function handleInfoMenu(
   selection: Selection
 ): Promise<void> {
   if (matchesOption(selection, "1", texts.INFO_LIST_ID.valores)) {
-    const { data } = await supabase
-      .from("clinic_locations")
-      .select("name, type, price_first_visit_cents")
-      .eq("is_active", true);
-    const body = texts.valoresText(data ?? []);
+    const [{ data: locations }, { data: examTypes }] = await Promise.all([
+      supabase
+        .from("clinic_locations")
+        .select("name, type, price_first_visit_cents")
+        .eq("is_active", true)
+        .neq("type", "exam"),
+      supabase.from("exam_types").select("name, price_cents").eq("is_active", true).order("name"),
+    ]);
+    const body = texts.valoresText(locations ?? [], examTypes ?? []);
     await sendAndLog(supabase, guardianId, "bot_info_valores", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );

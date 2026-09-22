@@ -229,7 +229,8 @@ export interface AppointmentCandidate {
   birthdate: string;
   scheduled_at: string;
   clinic_location_id: string;
-  appointment_type: "first_visit" | "return_visit";
+  appointment_type: "first_visit" | "return_visit" | "exam";
+  exam_type_id: string | null;
   google_event_id: string | null;
 }
 
@@ -241,7 +242,7 @@ export async function fetchUpcomingAppointments(
   const { data: rows } = await supabase
     .from("appointments")
     .select(
-      "id, scheduled_at, clinic_location_id, appointment_type, google_event_id, patient_id, patients!inner(full_name, birthdate, guardian_id)"
+      "id, scheduled_at, clinic_location_id, appointment_type, exam_type_id, google_event_id, patient_id, patients!inner(full_name, birthdate, guardian_id)"
     )
     .eq("patients.guardian_id", guardianId)
     .in("status", ["scheduled", "confirmed"])
@@ -257,6 +258,7 @@ export async function fetchUpcomingAppointments(
     scheduled_at: row.scheduled_at,
     clinic_location_id: row.clinic_location_id,
     appointment_type: row.appointment_type,
+    exam_type_id: row.exam_type_id ?? null,
     google_event_id: row.google_event_id ?? null,
   }));
 }

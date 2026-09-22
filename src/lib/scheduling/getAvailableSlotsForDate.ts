@@ -10,11 +10,13 @@ export async function getAvailableSlotsForDate({
   clinicLocationId,
   date,
   appointmentType,
+  examDurationMinutes,
 }: {
   supabase: SupabaseClient;
   clinicLocationId: string;
   date: string;
   appointmentType: AppointmentType;
+  examDurationMinutes?: number;
 }): Promise<AvailableSlot[]> {
   // Nunca oferece horário em feriado nacional — nem sugerido, nem escolhido
   // manualmente (ex.: admin tentando marcar direto numa data de feriado).
@@ -46,6 +48,7 @@ export async function getAvailableSlotsForDate({
     appointmentType,
     firstVisitDurationMinutes: settings.default_appointment_duration_minutes,
     returnVisitDurationMinutes: settings.default_return_visit_duration_minutes,
+    examDurationMinutes,
     bufferMinutes: settings.buffer_minutes_between_appointments,
   });
 }

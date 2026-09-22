@@ -50,7 +50,7 @@ function mergeBusyIntervals(busy: BusyInterval[], dayStart: number, bufferMinute
   return merged;
 }
 
-export type AppointmentType = "first_visit" | "return_visit";
+export type AppointmentType = "first_visit" | "return_visit" | "exam";
 
 interface MinuteGap {
   start: number;
@@ -67,6 +67,7 @@ export function computeAvailableSlots({
   appointmentType,
   firstVisitDurationMinutes,
   returnVisitDurationMinutes,
+  examDurationMinutes,
   bufferMinutes,
 }: {
   date: string;
@@ -75,6 +76,9 @@ export function computeAvailableSlots({
   appointmentType: AppointmentType;
   firstVisitDurationMinutes: number;
   returnVisitDurationMinutes: number;
+  // Duração do exame escolhido (`exam_types.duration_minutes`) — só usada
+  // quando `appointmentType === "exam"`.
+  examDurationMinutes?: number;
   bufferMinutes: number;
 }): AvailableSlot[] {
   const dayStart = new Date(`${date}T00:00:00-03:00`).getTime();
@@ -115,6 +119,12 @@ export function computeAvailableSlots({
     // Cada intervalo livre é preenchido a partir do próprio início (não do início da janela),
     // para que uma consulta mais curta não deixe um buraco impossível de preencher por uma mais longa.
     return gaps.flatMap((gap) => slotsFromGap(gap, firstVisitDurationMinutes));
+  }
+
+  if (appointmentType === "exam") {
+    // Mesmo princípio do first_visit — sem a priorização/reserva do retorno,
+    // que só faz sentido quando exame e consulta disputam o mesmo horário.
+    return gaps.flatMap((gap) => slotsFromGap(gap, examDurationMinutes ?? firstVisitDurationMinutes));
   }
 
   // Retorno: prioriza buracos que nunca caberiam uma primeira consulta (não faz diferença

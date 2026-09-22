@@ -22,13 +22,32 @@ function listRowTitle(index: number, label: string): string {
   return `${prefix}${truncated}`;
 }
 
+// Menu principal reorganizado (set/2026) — as 7 opções soltas de antes
+// (Agendar consulta/retorno, Cancelar, Remarcar, Informações, Secretária,
+// Marcar exame) viraram 4 grupos, pra não afogar o responsável de opções
+// numa lista só. Cancelar e Remarcar são, por baixo dos panos, o mesmo
+// fluxo de sempre (o responsável só pode ter um agendamento futuro ativo
+// por vez, seja consulta, retorno ou exame) — aparecem tanto em Consultas
+// quanto em Exames porque é o caminho que o responsável espera encontrar,
+// mesmo sendo a mesma lógica nos dois casos.
 export const MENU_LIST_ID = {
-  agendarConsulta: "menu_agendar_consulta",
-  agendarRetorno: "menu_agendar_retorno",
-  cancelar: "menu_cancelar",
-  remarcar: "menu_remarcar",
+  consultas: "menu_consultas",
+  exames: "menu_exames",
   informacoes: "menu_informacoes",
   secretaria: "menu_secretaria",
+} as const;
+
+export const CONSULTAS_LIST_ID = {
+  agendarConsulta: "consultas_agendar_consulta",
+  agendarRetorno: "consultas_agendar_retorno",
+  cancelar: "consultas_cancelar",
+  remarcar: "consultas_remarcar",
+} as const;
+
+export const EXAMES_LIST_ID = {
+  marcar: "exames_marcar",
+  cancelar: "exames_cancelar",
+  remarcar: "exames_remarcar",
 } as const;
 
 export const INFO_LIST_ID = {
@@ -52,12 +71,45 @@ export function menuSections(): ListSection[] {
   return [
     {
       rows: [
-        { id: MENU_LIST_ID.agendarConsulta, title: listRowTitle(0, "Agendar consulta") },
-        { id: MENU_LIST_ID.agendarRetorno, title: listRowTitle(1, "Agendar retorno") },
-        { id: MENU_LIST_ID.cancelar, title: listRowTitle(2, "Cancelar consulta") },
-        { id: MENU_LIST_ID.remarcar, title: listRowTitle(3, "Remarcar consulta") },
-        { id: MENU_LIST_ID.informacoes, title: listRowTitle(4, "Informações gerais") },
-        { id: MENU_LIST_ID.secretaria, title: listRowTitle(5, "Falar com secretária") },
+        { id: MENU_LIST_ID.consultas, title: listRowTitle(0, "Consultas") },
+        { id: MENU_LIST_ID.exames, title: listRowTitle(1, "Exames") },
+        { id: MENU_LIST_ID.informacoes, title: listRowTitle(2, "Informações gerais") },
+        { id: MENU_LIST_ID.secretaria, title: listRowTitle(3, "Falar com secretária") },
+      ],
+    },
+  ];
+}
+
+export function consultasMenuBodyText(): string {
+  return "O que você precisa sobre consultas?";
+}
+
+export function consultasMenuSections(): ListSection[] {
+  return [
+    {
+      rows: [
+        { id: CONSULTAS_LIST_ID.agendarConsulta, title: listRowTitle(0, "Agendar consulta") },
+        { id: CONSULTAS_LIST_ID.agendarRetorno, title: listRowTitle(1, "Agendar retorno") },
+        { id: CONSULTAS_LIST_ID.cancelar, title: listRowTitle(2, "Cancelar") },
+        { id: CONSULTAS_LIST_ID.remarcar, title: listRowTitle(3, "Remarcar") },
+        { id: BACK_TO_MENU_LIST_ID, title: listRowTitle(4, "Voltar ao menu") },
+      ],
+    },
+  ];
+}
+
+export function examesMenuBodyText(): string {
+  return "O que você precisa sobre exames?";
+}
+
+export function examesMenuSections(): ListSection[] {
+  return [
+    {
+      rows: [
+        { id: EXAMES_LIST_ID.marcar, title: listRowTitle(0, "Marcar exame") },
+        { id: EXAMES_LIST_ID.cancelar, title: listRowTitle(1, "Cancelar") },
+        { id: EXAMES_LIST_ID.remarcar, title: listRowTitle(2, "Remarcar") },
+        { id: BACK_TO_MENU_LIST_ID, title: listRowTitle(3, "Voltar ao menu") },
       ],
     },
   ];
@@ -95,20 +147,48 @@ interface ClinicLocationRow {
   price_first_visit_cents: number;
 }
 
+interface ExamTypePriceRow {
+  name: string;
+  price_cents: number;
+}
+
 // Decisão de negócio #2/#3 do plano: o bot sempre informa o valor e reforça
-// que o pagamento é 100% presencial, sem sinal antecipado.
-export function valoresText(locations: ClinicLocationRow[]): string {
-  if (locations.length === 0) {
-    return "No momento não temos valores cadastrados por aqui — escolha [6] Falar com a secretária para confirmar.";
+// que o pagamento é 100% presencial, sem sinal antecipado. `locations` já
+// vem sem o local "Exames" (chamador filtra por type != 'exam' — o valor de
+// exame vive em exam_types, mostrado separado). Para o tipo "clinic", o
+// nome próprio do local (ex. "Instituto Andre Camurça") não aparece — só
+// "Consulta" — pedido do cliente; "Atendimento domiciliar" continua com o
+// rótulo de sempre.
+export function valoresText(locations: ClinicLocationRow[], examTypes: ExamTypePriceRow[]): string {
+  if (locations.length === 0 && examTypes.length === 0) {
+    return "No momento não temos valores cadastrados por aqui — escolha [4] Falar com a secretária para confirmar.";
   }
 
-  const linhas = locations.map((loc) => {
-    const label = loc.type === "home_visit" ? "Atendimento domiciliar" : loc.name;
-    return `*${label}*\nConsulta: ${formatCentsBRL(loc.price_first_visit_cents)}`;
-  });
+  // Pode haver mais de um local type='clinic' (2 consultórios físicos, set/2026)
+  // — o valor da consulta é o mesmo em todos, então mostra uma única linha
+  // "Consulta" em vez de uma por consultório (o endereço específico só é
+  // decidido pela data escolhida, não faz sentido listar aqui).
+  const clinicRow = locations.find((loc) => loc.type === "clinic");
+  const homeVisitRows = locations.filter((loc) => loc.type === "home_visit");
+
+  const locationLines = [
+    ...(clinicRow ? [`*Consulta*\n${formatCentsBRL(clinicRow.price_first_visit_cents)}`] : []),
+    ...homeVisitRows.map(
+      (loc) => `*Atendimento domiciliar*\nConsulta: ${formatCentsBRL(loc.price_first_visit_cents)}`
+    ),
+  ];
+
+  const examLines =
+    examTypes.length > 0
+      ? [
+          `*Exames*\n${examTypes
+            .map((exam) => `${exam.name}: ${formatCentsBRL(exam.price_cents)}`)
+            .join("\n")}`,
+        ]
+      : [];
 
   return (
-    `${linhas.join("\n\n")}\n\n` +
+    `${[...locationLines, ...examLines].join("\n\n")}\n\n` +
     "O retorno está incluso no valor da consulta.\n\n" +
     "Pagamento no dia da consulta (dinheiro, transferência bancária ou PIX) — sem cobrança antecipada."
   );
@@ -139,7 +219,7 @@ export function enderecoText(clinicLocations: ClinicAddressRow[]): string {
   );
 
   if (withAddress.length === 0) {
-    return "O endereço do consultório ainda não está cadastrado por aqui — escolha [6] Falar com a secretária para confirmar.";
+    return "O endereço do consultório ainda não está cadastrado por aqui — escolha [4] Falar com a secretária para confirmar.";
   }
 
   const linhas = withAddress.map((loc) => {
@@ -182,7 +262,7 @@ export function locationSections(options: LocationOption[]): ListSection[] {
 }
 
 export function noLocationAvailableText(): string {
-  return "No momento não temos nenhum local de atendimento configurado — escolha [6] Falar com a secretária no menu principal.";
+  return "No momento não temos nenhum local de atendimento configurado — escolha [4] Falar com a secretária no menu principal.";
 }
 
 interface PatientCandidate {
@@ -256,13 +336,50 @@ export function bookingLinkText(patientName: string, url: string): string {
 }
 
 export function bookingLinkErrorText(): string {
-  return "Tivemos um problema para gerar o link de agendamento. Por favor, escolha [6] Falar com a secretária no menu principal.";
+  return "Tivemos um problema para gerar o link de agendamento. Por favor, escolha [4] Falar com a secretária no menu principal.";
 }
 
-export function patientAlreadyScheduledText(patientName: string, whenLabel: string): string {
+export function patientAlreadyScheduledText(patientName: string, whenLabel: string, isExam: boolean): string {
+  const menuPath = isExam ? "Exames > Remarcar" : "Consultas > Remarcar";
   return (
     `*${patientName}* já tem uma consulta marcada para ${whenLabel}. ` +
-    "Se quiser mudar o dia ou horário, escolha [4] Remarcar consulta no menu principal."
+    `Se quiser mudar o dia ou horário, escolha ${menuPath} no menu principal.`
+  );
+}
+
+// --- case 6 · Marcar exame (Fase 6) ---------------------------------------
+//
+// Reaproveita a identificação de paciente do case 1 (BOOK_PATIENT_SELECT/
+// BOOK_PATIENT_NEW, em booking.ts) — só a escolha do tipo de exame é
+// exclusiva daqui, já que não existe pergunta de local (todo exame usa o
+// único local "Exames").
+
+interface ExamTypeOption {
+  id: string;
+  name: string;
+}
+
+export function examTypeChoiceBodyText(): string {
+  return "Qual exame você quer marcar?";
+}
+
+export function examTypeSections(examTypes: ExamTypeOption[]): ListSection[] {
+  const rows = examTypes.map((exam, index) => ({
+    id: `exam_type_${exam.id}`,
+    title: listRowTitle(index, exam.name),
+  }));
+  rows.push({ id: BACK_TO_MENU_LIST_ID, title: listRowTitle(examTypes.length, "Voltar ao menu") });
+  return [{ rows }];
+}
+
+export function noExamTypesAvailableText(): string {
+  return "No momento não temos nenhum exame configurado para marcação — escolha [4] Falar com a secretária no menu principal.";
+}
+
+export function examBookingLinkText(patientName: string, examName: string, url: string): string {
+  return (
+    `Prontinho! Escolha o melhor dia e horário para o exame (${examName}) de ${patientName} neste link:\n${url}\n\n` +
+    "O link expira em 30 minutos."
   );
 }
 
@@ -294,21 +411,21 @@ export function appointmentListSections(candidates: AppointmentCandidate[], idPr
 }
 
 export function noMatchingAppointmentText(): string {
-  return "Não encontramos consulta futura para essa data de nascimento. Escolha [6] Falar com a secretária no menu principal se precisar de ajuda.";
+  return "Não encontramos consulta futura para essa data de nascimento. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
 }
 
 export function couldNotIdentifyAppointmentText(): string {
-  return "Não conseguimos confirmar qual consulta é. Escolha [6] Falar com a secretária no menu principal.";
+  return "Não conseguimos confirmar qual consulta é. Escolha [4] Falar com a secretária no menu principal.";
 }
 
 // --- case 3 · Remarcar --------------------------------------------------
 
 export function rescheduleNoGuardianText(): string {
-  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [6] Falar com a secretária no menu principal.";
+  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
 }
 
 export function rescheduleNoAppointmentsText(): string {
-  return "Não encontramos nenhuma consulta futura para remarcar neste número. Escolha [6] Falar com a secretária no menu principal se precisar de ajuda.";
+  return "Não encontramos nenhuma consulta futura para remarcar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
 }
 
 export function confirmAppointmentText(patientName: string, whenLabel: string): string {
@@ -323,17 +440,17 @@ export function rescheduleLinkText(patientName: string, url: string): string {
 }
 
 export function rescheduleLinkErrorText(): string {
-  return "Tivemos um problema para gerar o link de remarcação. Por favor, escolha [6] Falar com a secretária no menu principal.";
+  return "Tivemos um problema para gerar o link de remarcação. Por favor, escolha [4] Falar com a secretária no menu principal.";
 }
 
 // --- case 2 · Cancelar ----------------------------------------------------
 
 export function cancelNoGuardianText(): string {
-  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [6] Falar com a secretária no menu principal.";
+  return "Não encontramos nenhum cadastro associado a este número. Se você já é paciente, escolha [4] Falar com a secretária no menu principal.";
 }
 
 export function cancelNoAppointmentsText(): string {
-  return "Não encontramos nenhuma consulta futura para cancelar neste número. Escolha [6] Falar com a secretária no menu principal se precisar de ajuda.";
+  return "Não encontramos nenhuma consulta futura para cancelar neste número. Escolha [4] Falar com a secretária no menu principal se precisar de ajuda.";
 }
 
 export function confirmCancelText(patientName: string, whenLabel: string): string {
@@ -352,5 +469,5 @@ export function cancelSuccessText(patientName: string, whenLabel: string): strin
 }
 
 export function cancelErrorText(): string {
-  return "Tivemos um problema para cancelar a consulta. Por favor, escolha [6] Falar com a secretária no menu principal.";
+  return "Tivemos um problema para cancelar a consulta. Por favor, escolha [4] Falar com a secretária no menu principal.";
 }

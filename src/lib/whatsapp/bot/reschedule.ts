@@ -223,6 +223,7 @@ async function finishReschedule(
       patient_id: appointment.patient_id,
       clinic_location_id: appointment.clinic_location_id,
       appointment_type: appointment.appointment_type,
+      exam_type_id: appointment.exam_type_id,
       mode: "reschedule",
       appointment_id: appointment.id,
       guardian_phone: guardianPhone,

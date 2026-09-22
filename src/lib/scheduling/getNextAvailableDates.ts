@@ -32,12 +32,14 @@ export async function getNextAvailableDates({
   supabase,
   clinicLocationId,
   appointmentType,
+  examDurationMinutes,
   count = DEFAULT_DATE_COUNT,
   maxDaysAhead = MAX_DAYS_AHEAD,
 }: {
   supabase: SupabaseClient;
   clinicLocationId: string;
   appointmentType: AppointmentType;
+  examDurationMinutes?: number;
   count?: number;
   maxDaysAhead?: number;
 }): Promise<AvailableDate[]> {
@@ -81,6 +83,7 @@ export async function getNextAvailableDates({
         appointmentType,
         firstVisitDurationMinutes: settings.default_appointment_duration_minutes,
         returnVisitDurationMinutes: settings.default_return_visit_duration_minutes,
+        examDurationMinutes,
         bufferMinutes: settings.buffer_minutes_between_appointments,
       });
 

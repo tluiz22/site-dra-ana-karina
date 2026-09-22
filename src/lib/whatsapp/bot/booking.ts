@@ -45,10 +45,15 @@ interface PendingPatient {
   birthdate: string;
 }
 
-interface BookingContext {
-  appointment_type?: "first_visit" | "return_visit";
+export interface BookingContext {
+  appointment_type?: "first_visit" | "return_visit" | "exam";
   clinic_location_id?: string;
   clinic_location_label?: string;
+  // Só preenchidos quando appointment_type === "exam" (case 6 · Marcar
+  // exame, ver exam.ts) — carregados até finishBookingWithPatient para
+  // gravar em booking_links e compor a mensagem do link.
+  exam_type_id?: string;
+  exam_type_name?: string;
   location_options?: LocationOption[];
   awaiting?:
     | "patient_choice"
@@ -182,7 +187,13 @@ async function handleLocation(
 // com consulta futura já agendada — nunca lista todas (ver "Identificação
 // da criança" no plano, motivado por responsáveis-convênio com dezenas ou
 // centenas de crianças vinculadas ao mesmo telefone).
-async function enterPatientSelect(
+//
+// Exportada porque o case 6 · Marcar exame (exam.ts) entra direto neste
+// estado depois de escolher o tipo de exame — a identificação do paciente
+// é idêntica à do case 1 · Agendar, só muda o que acontece ao final
+// (gerar booking_links com appointment_type='exam' em vez de first_visit/
+// return_visit, feito em finishBookingWithPatient a partir do context).
+export async function enterPatientSelect(
   supabase: SupabaseClient,
   guardianPhone: string,
   guardianId: string | null,
@@ -568,7 +579,8 @@ async function finishBookingWithPatient(
   if (existingAppointment) {
     const body = texts.patientAlreadyScheduledText(
       patientName,
-      formatWhen(new Date(existingAppointment.scheduled_at))
+      formatWhen(new Date(existingAppointment.scheduled_at)),
+      context.appointment_type === "exam"
     );
     await sendAndLog(supabase, guardianId, "bot_book_already_scheduled", body, () =>
       sendTextMessage({ to: guardianPhone, body })
@@ -585,6 +597,7 @@ async function finishBookingWithPatient(
       patient_id: patientId,
       clinic_location_id: context.clinic_location_id,
       appointment_type: context.appointment_type,
+      exam_type_id: context.exam_type_id ?? null,
       mode: "create",
       guardian_phone: guardianPhone,
       expires_at: expiresAt,
@@ -599,7 +612,10 @@ async function finishBookingWithPatient(
   }
 
   const url = buildAppUrl(`/agendar/${link.id}`);
-  const body = texts.bookingLinkText(patientName, url);
+  const body =
+    context.appointment_type === "exam"
+      ? texts.examBookingLinkText(patientName, context.exam_type_name ?? "exame", url)
+      : texts.bookingLinkText(patientName, url);
   await sendAndLog(supabase, guardianId, "bot_booking_link", body, () =>
     sendTextMessage({ to: guardianPhone, body })
   );

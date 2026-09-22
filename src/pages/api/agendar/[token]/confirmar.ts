@@ -18,7 +18,11 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
 
   const supabase = createServiceClient();
 
-  const { data: link } = await supabase.from("booking_links").select("*").eq("id", token).maybeSingle();
+  const { data: link } = await supabase
+    .from("booking_links")
+    .select("*, exam_types ( name, duration_minutes, price_cents, preparation_instructions )")
+    .eq("id", token)
+    .maybeSingle();
 
   // Link inexistente, já usado ou expirado: manda de volta para a página,
   // que mostra o estado certo (usado = confirmação, expirado/inválido = aviso).
@@ -27,10 +31,22 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
   }
 
   const appointmentType = link.appointment_type as AppointmentType;
+  const examType = link.exam_types as unknown as {
+    name: string;
+    duration_minutes: number;
+    price_cents: number;
+    preparation_instructions: string | null;
+  } | null;
 
   const [{ data: settings }, slots] = await Promise.all([
     supabase.from("appointment_settings").select("*").eq("id", 1).single(),
-    getAvailableSlotsForDate({ supabase, clinicLocationId: link.clinic_location_id, date, appointmentType }),
+    getAvailableSlotsForDate({
+      supabase,
+      clinicLocationId: link.clinic_location_id,
+      date,
+      appointmentType,
+      examDurationMinutes: examType?.duration_minutes,
+    }),
   ]);
 
   if (!settings) {
@@ -43,9 +59,11 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
   }
 
   const durationMinutes =
-    appointmentType === "return_visit"
-      ? settings.default_return_visit_duration_minutes
-      : settings.default_appointment_duration_minutes;
+    appointmentType === "exam"
+      ? (examType?.duration_minutes ?? settings.default_appointment_duration_minutes)
+      : appointmentType === "return_visit"
+        ? settings.default_return_visit_duration_minutes
+        : settings.default_appointment_duration_minutes;
 
   const startDate = matchedSlot.start;
   const endDate = new Date(startDate.getTime() + durationMinutes * 60_000);
@@ -72,11 +90,15 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     full_name: string;
     phone: string;
   } | null;
-  const locationLabel = location?.type === "clinic" ? "Consultório" : "Domiciliar";
+  const locationLabel = location?.type === "clinic" ? "Consultório" : location?.type === "exam" ? "Exames" : "Domiciliar";
   const locationAddress = location?.address ?? null;
   // Retorno não tem valor próprio — está incluso no valor da consulta
   // anterior (decisão do cliente); `null` aciona esse texto na notificação.
-  const priceCents = appointmentType === "return_visit" ? null : location?.price_first_visit_cents;
+  // Exame tem valor próprio, em exam_types (não em clinic_locations).
+  const priceCents =
+    appointmentType === "exam" ? examType?.price_cents : appointmentType === "return_visit" ? null : location?.price_first_visit_cents;
+  const typeLabel =
+    appointmentType === "exam" ? (examType?.name ?? "Exame") : appointmentType === "return_visit" ? "Retorno" : "Consulta";
 
   let appointmentId: string;
 
@@ -108,7 +130,9 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
 
     appointmentId = appointment.id;
 
-    if (guardian?.phone) {
+    // Notificação de remarcação de exame fica pendente do template
+    // `exame_remarcado` (ainda não submetido à Meta — ver plano, Fase 6).
+    if (guardian?.phone && appointmentType !== "exam") {
       await sendAppointmentReschedule({
         supabase,
         appointmentId,
@@ -144,6 +168,7 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
         scheduled_at: startDate.toISOString(),
         duration_minutes: durationMinutes,
         appointment_type: appointmentType,
+        exam_type_id: appointmentType === "exam" ? link.exam_type_id : null,
         status: "scheduled",
         booking_channel: "whatsapp_bot",
       })
@@ -155,8 +180,8 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     }
 
     const event = await createEvent({
-      summary: `Consulta — ${patient.full_name}${guardian ? ` (resp. ${guardian.full_name})` : ""}`,
-      description: `Tel: ${guardian?.phone ?? "—"} | Tipo: ${appointmentType === "return_visit" ? "Retorno" : "Consulta"} | Local: ${locationLabel}`,
+      summary: `${typeLabel} — ${patient.full_name}${guardian ? ` (resp. ${guardian.full_name})` : ""}`,
+      description: `Tel: ${guardian?.phone ?? "—"} | Tipo: ${typeLabel} | Local: ${locationLabel}`,
       start: startDate.toISOString(),
       end: endDate.toISOString(),
       appointmentId: newAppointment.id,
@@ -166,7 +191,9 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
 
     appointmentId = newAppointment.id;
 
-    if (guardian?.phone) {
+    // Notificação de confirmação de exame fica pendente do template
+    // `exame_confirmado` (ainda não submetido à Meta — ver plano, Fase 6).
+    if (guardian?.phone && appointmentType !== "exam") {
       await sendAppointmentConfirmation({
         supabase,
         appointmentId,
