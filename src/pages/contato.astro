@@ -5,16 +5,17 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import WhatsAppButton from "../components/WhatsAppButton.astro";
 import { doctor } from "../data/doctor";
 
-const mapsHref =
-  "https://maps.google.com/?q=" +
-  encodeURIComponent(
-    doctor.address + ", " + doctor.city + ", " + doctor.state
-  );
+const clinicsWithMaps = doctor.clinics.map((clinic) => ({
+  ...clinic,
+  mapsHref:
+    "https://maps.google.com/?q=" +
+    encodeURIComponent(`${clinic.address}, ${doctor.city}, ${doctor.state}`),
+}));
 ---
 
 <BaseLayout
   title="Contato e agendamento | Pneumologista pediátrica em Mossoró"
-  description={`Entre em contato para agendar consulta com ${doctor.professionalName}, pneumologista pediátrica em Mossoró, no ${doctor.clinic}, em ${doctor.city}/${doctor.state}.`}
+  description={`Entre em contato para agendar consulta com ${doctor.professionalName}, pneumologista pediátrica em Mossoró, em ${doctor.city}/${doctor.state}.`}
   canonical={Astro.url.href}
 >
   <div class="mx-auto max-w-4xl px-4 py-16">
@@ -29,20 +30,28 @@ const mapsHref =
 
     <div class="mt-12 grid gap-8 sm:grid-cols-2">
       <section>
-        <h2 class="text-xl font-bold text-slate-900">Local e horário</h2>
-        <ul class="mt-3 space-y-2 text-slate-700">
-          <li><span class="font-medium">{doctor.clinic}</span></li>
-          <li>{doctor.address}<br />{doctor.city}/{doctor.state}</li>
-          <li>Horário: {doctor.serviceHours}</li>
+        <h2 class="text-xl font-bold text-slate-900">Locais e horário</h2>
+        <ul class="mt-3 space-y-4 text-slate-700">
+          {
+            clinicsWithMaps.map((clinic) => (
+              <li>
+                <span class="font-medium">{clinic.name}</span>
+                <br />
+                {clinic.address}, {doctor.city}/{doctor.state}
+                <br />
+                <a
+                  href={clinic.mapsHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="mt-1 inline-flex items-center text-sm font-medium text-sky-700 hover:text-sky-900"
+                >
+                  Ver rota no Google Maps →
+                </a>
+              </li>
+            ))
+          }
         </ul>
-        <a
-          href={mapsHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="mt-4 inline-flex items-center text-sm font-medium text-sky-700 hover:text-sky-900"
-        >
-          Ver rota no Google Maps →
-        </a>
+        <p class="mt-4 text-slate-700">Horário: {doctor.serviceHours}</p>
       </section>
 
       <section>

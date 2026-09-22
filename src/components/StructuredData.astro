@@ -10,13 +10,13 @@ const physician = {
   telephone: `+${doctor.phone}`,
   email: doctor.email,
   medicalSpecialty: ["Pediatrics", "Pulmonology"],
-  address: {
+  address: doctor.clinics.map((clinic) => ({
     "@type": "PostalAddress",
-    streetAddress: doctor.address,
+    streetAddress: clinic.address,
     addressLocality: doctor.city,
     addressRegion: doctor.state,
     addressCountry: "BR",
-  },
+  })),
   sameAs: [`https://instagram.com/${doctor.instagram}`],
 };
 ---
