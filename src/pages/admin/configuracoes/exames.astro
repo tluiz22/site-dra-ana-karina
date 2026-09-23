@@ -1,15 +1,23 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import ConfiguracoesTabs from "../../../components/admin/ConfiguracoesTabs.astro";
+import Card from "../../../components/admin/Card.astro";
+import Badge from "../../../components/admin/Badge.astro";
+import ConfirmDeleteDialog from "../../../components/admin/ConfirmDeleteDialog.astro";
 import { createClient } from "../../../lib/supabase/server";
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
-const { data: examTypes } = await supabase
+const showInactive = Astro.url.searchParams.get("show_inactive") === "1";
+
+let examTypesQuery = supabase
   .from("exam_types")
-  .select("id, name, duration_minutes, price_cents, preparation_instructions")
-  .eq("is_active", true)
+  .select("id, name, duration_minutes, price_cents, preparation_instructions, is_active")
   .order("name");
+
+if (!showInactive) examTypesQuery = examTypesQuery.eq("is_active", true);
+
+const { data: examTypes } = await examTypesQuery;
 
 const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? "Não foi possível salvar. Confira os dados e tente novamente." : null;
@@ -27,125 +35,163 @@ function formatCentsBRL(cents: number): string {
 
   {
     errorMessage && (
-      <p class="mt-6 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+      <p class="mt-6 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
     )
   }
 
   <section class="mt-6">
-    <h2 class="text-lg font-semibold text-slate-900">Tipos de exame</h2>
-    <p class="mt-1 text-sm text-slate-600">
-      Exames que podem ser marcados pelo bot. Todo exame usa o mesmo local ("Exames"); a
-      disponibilidade dele é configurada como qualquer outro local, na aba Disponibilidade.
-    </p>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">Tipos de exame</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Exames que podem ser marcados pelo bot. Todo exame usa o mesmo local ("Exames"); a
+          disponibilidade dele é configurada como qualquer outro local, na aba Disponibilidade.
+        </p>
+      </div>
+      <form method="GET" action="/admin/configuracoes/exames">
+        <label class="flex items-center gap-1.5 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            name="show_inactive"
+            value="1"
+            checked={showInactive}
+            onchange="this.form.submit()"
+            class="rounded border-slate-300 text-sky-700 focus:ring-sky-600"
+          />
+          Mostrar inativos
+        </label>
+      </form>
+    </div>
 
-    <table class="mt-4 w-full border-collapse overflow-hidden rounded-md border border-slate-200 text-left text-sm">
-      <thead class="bg-slate-100 text-slate-600">
-        <tr>
-          <th class="px-3 py-2 font-medium">Nome</th>
-          <th class="px-3 py-2 font-medium">Duração</th>
-          <th class="px-3 py-2 font-medium">Valor</th>
-          <th class="px-3 py-2 font-medium">Preparo</th>
-          <th class="px-3 py-2"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {
-          examTypes?.length ? (
-            examTypes.map((exam) => (
-              <tr class="border-t border-slate-200">
-                <td class="px-3 py-2">{exam.name}</td>
-                <td class="px-3 py-2">{exam.duration_minutes} min</td>
-                <td class="px-3 py-2">{formatCentsBRL(exam.price_cents)}</td>
-                <td class="px-3 py-2">{exam.preparation_instructions || "—"}</td>
-                <td class="px-3 py-2 text-right">
-                  <div class="flex justify-end gap-3">
-                    <a
-                      href={`/admin/configuracoes/exames/${exam.id}`}
-                      class="text-xs font-medium text-sky-700 hover:underline"
-                    >
-                      Editar
-                    </a>
-                    <form method="POST" action={`/api/admin/configuracoes/exam-types/${exam.id}/deactivate`}>
-                      <button
-                        type="submit"
-                        class="text-xs font-medium text-red-700 hover:underline"
+    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table class="w-full min-w-[640px] border-collapse text-left text-sm">
+        <thead class="bg-slate-50 text-slate-600">
+          <tr>
+            <th class="px-3 py-2 font-medium">Nome</th>
+            <th class="px-3 py-2 font-medium">Duração</th>
+            <th class="px-3 py-2 font-medium">Valor</th>
+            <th class="px-3 py-2 font-medium">Preparo</th>
+            <th class="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            examTypes?.length ? (
+              examTypes.map((exam) => (
+                <tr class="border-t border-slate-200">
+                  <td class="px-3 py-2">
+                    {exam.name}
+                    {!exam.is_active && (
+                      <Badge variant="neutral" class="ml-2 align-middle">
+                        Inativo
+                      </Badge>
+                    )}
+                  </td>
+                  <td class="px-3 py-2">{exam.duration_minutes} min</td>
+                  <td class="px-3 py-2">{formatCentsBRL(exam.price_cents)}</td>
+                  <td class="px-3 py-2">{exam.preparation_instructions || "—"}</td>
+                  <td class="whitespace-nowrap px-3 py-2 text-right">
+                    <div class="flex flex-nowrap justify-end gap-1.5">
+                      <a
+                        href={`/admin/configuracoes/exames/${exam.id}`}
+                        class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
                       >
-                        Remover
-                      </button>
-                    </form>
-                  </div>
+                        Editar
+                      </a>
+                      {exam.is_active ? (
+                        <form method="POST" action={`/api/admin/configuracoes/exam-types/${exam.id}/deactivate`}>
+                          <button
+                            type="submit"
+                            class="js-confirm-delete rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+                            data-confirm-message={`Remover ${exam.name}? Fica marcado como inativo — os dados continuam guardados e dá pra reativar depois em "Mostrar inativos".`}
+                          >
+                            Remover
+                          </button>
+                        </form>
+                      ) : (
+                        <form method="POST" action={`/api/admin/configuracoes/exam-types/${exam.id}/reactivate`}>
+                          <button
+                            type="submit"
+                            class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                          >
+                            Reativar
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr class="border-t border-slate-200">
+                <td class="px-3 py-4 text-slate-500" colspan="5">
+                  Nenhum tipo de exame cadastrado ainda.
                 </td>
               </tr>
-            ))
-          ) : (
-            <tr class="border-t border-slate-200">
-              <td class="px-3 py-4 text-slate-500" colspan="5">
-                Nenhum tipo de exame cadastrado ainda.
-              </td>
-            </tr>
-          )
-        }
-      </tbody>
-    </table>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
 
-    <form
-      method="POST"
-      action="/api/admin/configuracoes/exam-types"
-      class="mt-4 flex flex-wrap items-end gap-3 rounded-md border border-slate-200 bg-white p-4"
-    >
-      <div>
-        <label for="name" class="block text-sm font-medium text-slate-700">Nome</label>
-        <input
-          type="text"
-          id="name"
-          name="name"
-          required
-          class="mt-1 w-48 rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label for="duration_minutes" class="block text-sm font-medium text-slate-700">
-          Duração (min)
-        </label>
-        <input
-          type="number"
-          min="1"
-          id="duration_minutes"
-          name="duration_minutes"
-          required
-          class="mt-1 w-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label for="price" class="block text-sm font-medium text-slate-700">Valor (R$)</label>
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          id="price"
-          name="price"
-          required
-          class="mt-1 w-28 rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div class="min-w-[14rem] flex-1">
-        <label for="preparation_instructions" class="block text-sm font-medium text-slate-700">
-          Instruções de preparo
-        </label>
-        <input
-          type="text"
-          id="preparation_instructions"
-          name="preparation_instructions"
-          placeholder="ex.: jejum de 8 horas"
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <button
-        type="submit"
-        class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
-      >
-        Adicionar
-      </button>
-    </form>
+    <Card class="mt-4">
+      <form method="POST" action="/api/admin/configuracoes/exam-types" class="flex flex-wrap items-end gap-3">
+        <div>
+          <label for="name" class="block text-sm font-medium text-slate-700">Nome</label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            required
+            class="mt-1 w-48 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="duration_minutes" class="block text-sm font-medium text-slate-700">
+            Duração (min)
+          </label>
+          <input
+            type="number"
+            min="1"
+            id="duration_minutes"
+            name="duration_minutes"
+            required
+            class="mt-1 w-24 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="price" class="block text-sm font-medium text-slate-700">Valor (R$)</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            id="price"
+            name="price"
+            required
+            class="mt-1 w-28 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div class="min-w-[14rem] flex-1">
+          <label for="preparation_instructions" class="block text-sm font-medium text-slate-700">
+            Instruções de preparo
+          </label>
+          <input
+            type="text"
+            id="preparation_instructions"
+            name="preparation_instructions"
+            placeholder="ex.: jejum de 8 horas"
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <button
+          type="submit"
+          class="rounded-md bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-800"
+        >
+          Adicionar
+        </button>
+      </form>
+    </Card>
   </section>
+
+  <ConfirmDeleteDialog />
 </AdminLayout>

@@ -1,6 +1,9 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import ConfiguracoesTabs from "../../../components/admin/ConfiguracoesTabs.astro";
+import Card from "../../../components/admin/Card.astro";
+import Badge from "../../../components/admin/Badge.astro";
+import ConfirmDeleteDialog from "../../../components/admin/ConfirmDeleteDialog.astro";
 import { createClient } from "../../../lib/supabase/server";
 
 const supabase = createClient(Astro.request, Astro.cookies);
@@ -22,7 +25,7 @@ const errorMessage = errorParam ? "Não foi possível salvar. Confira os dados e
 
   {
     errorMessage && (
-      <p class="mt-6 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+      <p class="mt-6 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
     )
   }
 
@@ -34,104 +37,121 @@ const errorMessage = errorParam ? "Não foi possível salvar. Confira os dados e
       exames, um número de teste temporário) e desativar sem perder o cadastro.
     </p>
 
-    <table class="mt-4 w-full border-collapse overflow-hidden rounded-md border border-slate-200 text-left text-sm">
-      <thead class="bg-slate-100 text-slate-600">
-        <tr>
-          <th class="px-3 py-2 font-medium">Rótulo</th>
-          <th class="px-3 py-2 font-medium">Telefone</th>
-          <th class="px-3 py-2 font-medium">Consultas</th>
-          <th class="px-3 py-2 font-medium">Exames</th>
-          <th class="px-3 py-2 font-medium">Status</th>
-          <th class="px-3 py-2"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {
-          recipients?.length ? (
-            recipients.map((recipient) => (
+    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table class="w-full min-w-[680px] border-collapse text-left text-sm">
+        <thead class="bg-slate-50 text-slate-600">
+          <tr>
+            <th class="px-3 py-2 font-medium">Rótulo</th>
+            <th class="px-3 py-2 font-medium">Telefone</th>
+            <th class="px-3 py-2 font-medium">Consultas</th>
+            <th class="px-3 py-2 font-medium">Exames</th>
+            <th class="px-3 py-2 font-medium">Status</th>
+            <th class="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            recipients?.length ? (
+              recipients.map((recipient) => (
+                <tr class="border-t border-slate-200">
+                  <td class="px-3 py-2">{recipient.label}</td>
+                  <td class="px-3 py-2">{recipient.phone}</td>
+                  <td class="px-3 py-2">{recipient.receives_consultas ? "Sim" : "Não"}</td>
+                  <td class="px-3 py-2">{recipient.receives_exames ? "Sim" : "Não"}</td>
+                  <td class="px-3 py-2">
+                    <Badge variant={recipient.is_active ? "success" : "neutral"}>
+                      {recipient.is_active ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </td>
+                  <td class="whitespace-nowrap px-3 py-2 text-right">
+                    <div class="flex flex-nowrap justify-end gap-1.5">
+                      <a
+                        href={`/admin/configuracoes/contatos/${recipient.id}`}
+                        class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      >
+                        Editar
+                      </a>
+                      {recipient.is_active ? (
+                        <form method="POST" action={`/api/admin/configuracoes/notification-recipients/${recipient.id}/deactivate`}>
+                          <button
+                            type="submit"
+                            class="js-confirm-delete rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+                            data-confirm-message={`Desativar ${recipient.label}? Ele para de receber o resumo diário até você reativar — o cadastro não se perde.`}
+                          >
+                            Desativar
+                          </button>
+                        </form>
+                      ) : (
+                        <form method="POST" action={`/api/admin/configuracoes/notification-recipients/${recipient.id}/reactivate`}>
+                          <button
+                            type="submit"
+                            class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                          >
+                            Reativar
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
               <tr class="border-t border-slate-200">
-                <td class="px-3 py-2">{recipient.label}</td>
-                <td class="px-3 py-2">{recipient.phone}</td>
-                <td class="px-3 py-2">{recipient.receives_consultas ? "Sim" : "Não"}</td>
-                <td class="px-3 py-2">{recipient.receives_exames ? "Sim" : "Não"}</td>
-                <td class="px-3 py-2">{recipient.is_active ? "Ativo" : "Inativo"}</td>
-                <td class="px-3 py-2 text-right">
-                  <div class="flex justify-end gap-3">
-                    <a
-                      href={`/admin/configuracoes/contatos/${recipient.id}`}
-                      class="text-xs font-medium text-sky-700 hover:underline"
-                    >
-                      Editar
-                    </a>
-                    {recipient.is_active ? (
-                      <form method="POST" action={`/api/admin/configuracoes/notification-recipients/${recipient.id}/deactivate`}>
-                        <button type="submit" class="text-xs font-medium text-red-700 hover:underline">
-                          Desativar
-                        </button>
-                      </form>
-                    ) : (
-                      <form method="POST" action={`/api/admin/configuracoes/notification-recipients/${recipient.id}/reactivate`}>
-                        <button type="submit" class="text-xs font-medium text-emerald-700 hover:underline">
-                          Reativar
-                        </button>
-                      </form>
-                    )}
-                  </div>
+                <td class="px-3 py-4 text-slate-500" colspan="6">
+                  Nenhum destinatário cadastrado ainda.
                 </td>
               </tr>
-            ))
-          ) : (
-            <tr class="border-t border-slate-200">
-              <td class="px-3 py-4 text-slate-500" colspan="6">
-                Nenhum destinatário cadastrado ainda.
-              </td>
-            </tr>
-          )
-        }
-      </tbody>
-    </table>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
 
-    <form
-      method="POST"
-      action="/api/admin/configuracoes/notification-recipients"
-      class="mt-4 flex flex-wrap items-end gap-3 rounded-md border border-slate-200 bg-white p-4"
-    >
-      <div>
-        <label for="label" class="block text-sm font-medium text-slate-700">Rótulo</label>
-        <input
-          type="text"
-          id="label"
-          name="label"
-          placeholder="ex.: Dra. Ana Karina"
-          required
-          class="mt-1 w-48 rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label for="phone" class="block text-sm font-medium text-slate-700">Telefone</label>
-        <input
-          type="text"
-          id="phone"
-          name="phone"
-          placeholder="(84) 98188-0777"
-          required
-          class="mt-1 w-40 rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div class="flex items-center gap-2 pb-2">
-        <input type="checkbox" id="receives_consultas" name="receives_consultas" class="h-4 w-4 rounded border-slate-300" />
-        <label for="receives_consultas" class="text-sm text-slate-700">Recebe resumo de consultas</label>
-      </div>
-      <div class="flex items-center gap-2 pb-2">
-        <input type="checkbox" id="receives_exames" name="receives_exames" class="h-4 w-4 rounded border-slate-300" />
-        <label for="receives_exames" class="text-sm text-slate-700">Recebe resumo de exames</label>
-      </div>
-      <button
-        type="submit"
-        class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+    <Card class="mt-4">
+      <form
+        method="POST"
+        action="/api/admin/configuracoes/notification-recipients"
+        class="flex flex-wrap items-end gap-3"
       >
-        Adicionar
-      </button>
-    </form>
+        <div>
+          <label for="label" class="block text-sm font-medium text-slate-700">Rótulo</label>
+          <input
+            type="text"
+            id="label"
+            name="label"
+            placeholder="ex.: Dra. Ana Karina"
+            required
+            class="mt-1 w-48 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="phone" class="block text-sm font-medium text-slate-700">Telefone</label>
+          <input
+            type="text"
+            id="phone"
+            name="phone"
+            placeholder="(84) 98188-0777"
+            required
+            class="mt-1 w-40 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div class="flex items-center gap-2 pb-2">
+          <input type="checkbox" id="receives_consultas" name="receives_consultas" class="h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-600" />
+          <label for="receives_consultas" class="text-sm text-slate-700">Recebe resumo de consultas</label>
+        </div>
+        <div class="flex items-center gap-2 pb-2">
+          <input type="checkbox" id="receives_exames" name="receives_exames" class="h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-600" />
+          <label for="receives_exames" class="text-sm text-slate-700">Recebe resumo de exames</label>
+        </div>
+        <button
+          type="submit"
+          class="rounded-md bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-800"
+        >
+          Adicionar
+        </button>
+      </form>
+    </Card>
   </section>
+
+  <ConfirmDeleteDialog />
 </AdminLayout>
