@@ -4,6 +4,14 @@
     {
       "path": "/api/cron/appointment-reminders",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/daily-summary?send=preview",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/daily-summary?send=final",
+      "schedule": "30 9 * * *"
     }
   ]
 }
