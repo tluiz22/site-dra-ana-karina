@@ -1,0 +1,15 @@
+---
+// Cartão base reutilizado pelas telas do admin (Agenda, e as próximas do
+// redesenho visual — Pacientes, Configurações). Ver plano, "Redesenho visual
+// do admin".
+interface Props {
+  class?: string;
+  muted?: boolean;
+}
+
+const { class: className = "", muted = false } = Astro.props;
+---
+
+<div class={`rounded-lg border border-slate-200 bg-white p-4 shadow-sm ${muted ? "opacity-60" : ""} ${className}`}>
+  <slot />
+</div>

@@ -1,5 +1,9 @@
 ---
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import Card from "../../components/admin/Card.astro";
+import Badge from "../../components/admin/Badge.astro";
+import type { BadgeVariant } from "../../components/admin/Badge.astro";
+import Icon from "../../components/admin/Icon.astro";
 import { createClient } from "../../lib/supabase/server";
 import { listEvents } from "../../lib/google/calendar";
 
@@ -44,6 +48,12 @@ const appointmentTypeLabels: Record<string, string> = {
   exam: "Exame",
 };
 
+function typeBadgeVariant(type: string | undefined): BadgeVariant {
+  if (type === "exam") return "warning";
+  if (type === "return_visit") return "accent";
+  return "info";
+}
+
 function formatTime(dateTime: string | undefined): string {
   if (!dateTime) return "—";
   const d = new Date(dateTime);
@@ -56,60 +66,81 @@ const sortedEvents = [...events].sort(
 ---
 
 <AdminLayout title="Agenda">
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <h1 class="text-2xl font-bold text-slate-900">Agenda</h1>
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Agenda</h1>
+      <nav class="mt-3 flex gap-x-5 border-b border-slate-200 text-sm font-medium">
+        <span class="-mb-px border-b-2 border-sky-700 pb-2 text-sky-700">Dia</span>
+        <a
+          href={`/admin/agenda/semana?date=${date}`}
+          class="-mb-px border-b-2 border-transparent pb-2 text-slate-600 hover:text-sky-700"
+        >
+          Semana
+        </a>
+        <a
+          href={`/admin/agenda/mes?date=${date}`}
+          class="-mb-px border-b-2 border-transparent pb-2 text-slate-600 hover:text-sky-700"
+        >
+          Mês
+        </a>
+      </nav>
+    </div>
+
     <div class="flex flex-wrap gap-2">
       <a
-        href={`/admin/agenda/semana?date=${date}`}
-        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-      >
-        Ver por semana
-      </a>
-      <a
-        href={`/admin/agenda/mes?date=${date}`}
-        class="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-      >
-        Ver por mês
-      </a>
-      <a
         href={`/admin/agenda/marcar?date=${date}`}
-        class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+        class="inline-flex items-center gap-1.5 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
       >
+        <Icon name="plus" class="h-4 w-4" />
         Marcar consulta
       </a>
       <a
         href={`/admin/agenda/marcar-exame?date=${date}`}
-        class="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+        class="inline-flex items-center gap-1.5 rounded-md border border-sky-700 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50"
       >
+        <Icon name="plus" class="h-4 w-4" />
         Marcar exame
       </a>
     </div>
   </div>
 
-  <div class="mt-3 flex flex-wrap items-center gap-3">
-    <form method="GET" action="/admin/agenda" class="flex items-center gap-2">
-      <a href={`/admin/agenda?date=${addDays(date, -1)}`} class="text-sky-700 hover:underline">
-        &larr; Dia anterior
-      </a>
-      <input
-        type="date"
-        name="date"
-        value={date}
-        onchange="this.form.submit()"
-        class="rounded-md border border-slate-300 px-3 py-2 text-sm"
-      />
-      <a href={`/admin/agenda?date=${addDays(date, 1)}`} class="text-sky-700 hover:underline">
-        Próximo dia &rarr;
-      </a>
-      {
-        date !== todayFortaleza() && (
-          <a href="/admin/agenda" class="text-sm text-slate-500 hover:underline">
-            Hoje
-          </a>
-        )
-      }
-    </form>
-  </div>
+  <form
+    method="GET"
+    action="/admin/agenda"
+    class="mt-6 flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-2 sm:inline-flex"
+  >
+    <a
+      href={`/admin/agenda?date=${addDays(date, -1)}`}
+      aria-label="Dia anterior"
+      class="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-sky-700"
+    >
+      <Icon name="chevron-left" class="h-5 w-5" />
+    </a>
+    <input
+      type="date"
+      name="date"
+      value={date}
+      onchange="this.form.submit()"
+      class="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm sm:flex-none"
+    />
+    <a
+      href={`/admin/agenda?date=${addDays(date, 1)}`}
+      aria-label="Próximo dia"
+      class="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-sky-700"
+    >
+      <Icon name="chevron-right" class="h-5 w-5" />
+    </a>
+    {
+      date !== todayFortaleza() && (
+        <a
+          href="/admin/agenda"
+          class="ml-1 shrink-0 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Hoje
+        </a>
+      )
+    }
+  </form>
 
   <div class="mt-6 flex flex-col gap-3">
     {
@@ -118,46 +149,43 @@ const sortedEvents = [...events].sort(
           const appointmentId = event.extendedProperties?.private?.appointment_id;
           const appointment = appointmentId ? appointmentsById.get(appointmentId) : undefined;
           const isCancelled = event.status === "cancelled";
+          const isPast = Boolean(event.start.dateTime) && new Date(event.start.dateTime!).getTime() < Date.now();
           const patient = (appointment?.patients ?? null) as any;
           const guardian = patient?.guardians ?? null;
           const location = (appointment?.clinic_locations ?? null) as any;
 
           return (
-            <div
-              class={`rounded-md border p-4 ${isCancelled ? "border-slate-200 bg-slate-50 opacity-60" : "border-slate-200 bg-white"}`}
-            >
+            <Card muted={isCancelled}>
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <span class="font-medium text-slate-900">
+                <span class="text-base font-semibold text-slate-900">
                   {formatTime(event.start.dateTime)} – {formatTime(event.end.dateTime)}
                 </span>
-                {isCancelled && (
-                  <span class="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
-                    Cancelado
-                  </span>
-                )}
+                {isCancelled && <Badge variant="neutral">Cancelado</Badge>}
               </div>
               {appointment ? (
-                <div class="mt-1 text-sm text-slate-700">
-                  <p class="font-medium">{patient?.full_name}</p>
-                  <p class="text-slate-500">
+                <div class="mt-2 text-sm text-slate-700">
+                  <p class="font-medium text-slate-900">{patient?.full_name}</p>
+                  <p class="mt-0.5 text-slate-500">
                     Resp.: {guardian?.full_name} · {guardian?.phone}
                   </p>
-                  <p class="text-slate-500">
-                    {appointment.appointment_type === "exam"
-                      ? appointmentTypeLabels.exam
-                      : `${appointmentTypeLabels[appointment.appointment_type] ?? appointment.appointment_type} · ${location?.type === "clinic" ? "Consultório" : "Domiciliar"}`}
-                  </p>
-                  {!isCancelled && (
-                    <div class="mt-2 flex flex-wrap gap-2">
+                  <div class="mt-2">
+                    <Badge variant={typeBadgeVariant(appointment.appointment_type)}>
+                      {appointment.appointment_type === "exam"
+                        ? appointmentTypeLabels.exam
+                        : `${appointmentTypeLabels[appointment.appointment_type] ?? appointment.appointment_type} · ${location?.type === "clinic" ? "Consultório" : "Domiciliar"}`}
+                    </Badge>
+                  </div>
+                  {!isCancelled && !isPast && (
+                    <div class="mt-3 flex gap-2">
                       <a
                         href={`${appointment.appointment_type === "exam" ? "/admin/agenda/remarcar-exame" : "/admin/agenda/remarcar"}?appointment_id=${appointment.id}`}
-                        class="rounded-md border border-sky-300 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
+                        class="flex-1 rounded-md border border-sky-300 px-3 py-2 text-center text-xs font-semibold text-sky-700 hover:bg-sky-50"
                       >
                         Remarcar
                       </a>
                       <button
                         type="button"
-                        class="cancel-appointment-btn rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                        class="cancel-appointment-btn flex-1 rounded-md border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
                         data-event-id={event.id}
                         data-appointment-id={appointment.id}
                       >
@@ -165,47 +193,108 @@ const sortedEvents = [...events].sort(
                       </button>
                     </div>
                   )}
+                  {!isCancelled && isPast && (
+                    <p class="mt-3 text-xs text-slate-400">
+                      Já passou —{" "}
+                      <a href="/admin/consultas" class="text-sky-700 hover:underline">
+                        confirme em Consultas
+                      </a>
+                      .
+                    </p>
+                  )}
                 </div>
               ) : (
-                <p class="mt-1 text-sm text-slate-500">
+                <p class="mt-2 text-sm text-slate-500">
                   {event.summary || "Bloqueio manual"} (sem registro de paciente vinculado)
                 </p>
               )}
-            </div>
+            </Card>
           );
         })
       ) : (
-        <p class="text-slate-500">Nenhum evento nesse dia.</p>
+        <Card class="text-center text-slate-500">Nenhum evento nesse dia.</Card>
       )
     }
   </div>
+
+  <!-- Confirmação de cancelamento em modal próprio (não usa window.confirm) —
+       o diálogo nativo do navegador mostra a URL da página no título, o que
+       não fica bom no fluxo do admin. -->
+  <dialog
+    id="cancel_dialog"
+    class="w-[calc(100%-2rem)] max-w-sm rounded-lg border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-900/40"
+  >
+    <div class="p-5">
+      <h2 class="text-base font-semibold text-slate-900">Cancelar agendamento?</h2>
+      <p class="mt-2 text-sm text-slate-600">O horário volta a ficar livre na agenda.</p>
+      <p id="cancel_dialog_error" class="mt-2 hidden text-sm text-red-700">
+        Não foi possível cancelar. Tente novamente.
+      </p>
+      <div class="mt-5 flex justify-end gap-2">
+        <button
+          type="button"
+          id="cancel_dialog_dismiss"
+          class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Voltar
+        </button>
+        <button
+          type="button"
+          id="cancel_dialog_accept"
+          class="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Cancelar agendamento
+        </button>
+      </div>
+    </div>
+  </dialog>
 </AdminLayout>
 
 <script>
+  const dialog = document.getElementById("cancel_dialog") as HTMLDialogElement;
+  const dismissBtn = document.getElementById("cancel_dialog_dismiss") as HTMLButtonElement;
+  const acceptBtn = document.getElementById("cancel_dialog_accept") as HTMLButtonElement;
+  const errorMsg = document.getElementById("cancel_dialog_error") as HTMLParagraphElement;
+
+  let pendingEventId: string | null = null;
+  let pendingAppointmentId: string | null = null;
+
   document.querySelectorAll(".cancel-appointment-btn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Cancelar este agendamento? O horário volta a ficar livre na agenda.")) return;
-
+    btn.addEventListener("click", () => {
       const button = btn as HTMLButtonElement;
-      const eventId = button.dataset.eventId!;
-      const appointmentId = button.dataset.appointmentId!;
-
-      button.disabled = true;
-      button.textContent = "Cancelando…";
-
-      const response = await fetch(`/api/admin/agenda/events/${encodeURIComponent(eventId)}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointmentId }),
-      });
-
-      if (response.ok) {
-        window.location.reload();
-      } else {
-        button.disabled = false;
-        button.textContent = "Cancelar";
-        alert("Não foi possível cancelar. Tente novamente.");
-      }
+      pendingEventId = button.dataset.eventId!;
+      pendingAppointmentId = button.dataset.appointmentId!;
+      errorMsg.classList.add("hidden");
+      acceptBtn.disabled = false;
+      acceptBtn.textContent = "Cancelar agendamento";
+      dialog.showModal();
     });
+  });
+
+  dismissBtn.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+
+  acceptBtn.addEventListener("click", async () => {
+    if (!pendingEventId || !pendingAppointmentId) return;
+
+    acceptBtn.disabled = true;
+    acceptBtn.textContent = "Cancelando…";
+    errorMsg.classList.add("hidden");
+
+    const response = await fetch(`/api/admin/agenda/events/${encodeURIComponent(pendingEventId)}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ appointmentId: pendingAppointmentId }),
+    });
+
+    if (response.ok) {
+      window.location.reload();
+    } else {
+      acceptBtn.disabled = false;
+      acceptBtn.textContent = "Cancelar agendamento";
+      errorMsg.classList.remove("hidden");
+    }
   });
 </script>
