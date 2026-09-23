@@ -1,8 +1,253 @@
 ---
+// Fase 8 — fila de confirmação, mobile-first. "Pendentes" é uma lista curta
+// em cards, pra médica confirmar rápido pelo celular. "Confirmadas" tende a
+// crescer sem limite (é o histórico do que já foi decidido), por isso usa
+// grid com paginação — mesmo padrão da tela de Pacientes — em vez de cards.
+// Ver plano, seção "Fase 8".
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { createClient } from "../../../lib/supabase/server";
+import { buildAppointmentTypeLabel } from "../../../lib/whatsapp/notifications";
+import { formatWhen } from "../../../lib/whatsapp/formatDateTime";
+
+const PAST_WINDOW_DAYS = 60;
+const PAGE_SIZE = 20;
+
+const supabase = createClient(Astro.request, Astro.cookies);
+
+const tabParam = Astro.url.searchParams.get("tab");
+const tab: "pendentes" | "confirmadas" = tabParam === "confirmadas" ? "confirmadas" : "pendentes";
+
+const now = new Date();
+
+function locationLabel(type: string | undefined): string {
+  if (type === "clinic") return "Consultório";
+  if (type === "exam") return "Exames";
+  return "Domiciliar";
+}
+
+function mapRow(a: {
+  id: string;
+  scheduled_at: string;
+  appointment_type: string;
+  status: string;
+  patients: unknown;
+  exam_types: unknown;
+  clinic_locations: unknown;
+}) {
+  const patient = (a.patients ?? null) as unknown as { full_name: string } | null;
+  const examType = (a.exam_types ?? null) as unknown as { name: string } | null;
+  const location = (a.clinic_locations ?? null) as unknown as { type: string } | null;
+
+  return {
+    id: a.id,
+    patientName: patient?.full_name ?? "Paciente",
+    typeLabel: buildAppointmentTypeLabel(a.appointment_type, examType?.name),
+    locationLabel: locationLabel(location?.type),
+    whenLabel: formatWhen(new Date(a.scheduled_at)),
+    status: a.status,
+  };
+}
+
+function tabUrl(target: "pendentes" | "confirmadas"): string {
+  return `/admin/consultas?tab=${target}`;
+}
+
+const SELECT_COLUMNS =
+  "id, scheduled_at, appointment_type, status, patients ( full_name ), exam_types ( name ), clinic_locations ( type )";
+
+let cards: ReturnType<typeof mapRow>[] = [];
+let rows: ReturnType<typeof mapRow>[] = [];
+let page = 1;
+let totalPages = 1;
+
+if (tab === "pendentes") {
+  const windowStart = new Date(now.getTime() - PAST_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const { data } = await supabase
+    .from("appointments")
+    .select(SELECT_COLUMNS)
+    .in("status", ["scheduled", "confirmed"])
+    .lt("scheduled_at", now.toISOString())
+    .gte("scheduled_at", windowStart.toISOString())
+    .order("scheduled_at", { ascending: false });
+
+  cards = (data ?? []).map(mapRow);
+} else {
+  page = Math.max(1, Number(Astro.url.searchParams.get("page")) || 1);
+  const from = (page - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+
+  const { data, count } = await supabase
+    .from("appointments")
+    .select(SELECT_COLUMNS, { count: "exact" })
+    .in("status", ["completed", "no_show"])
+    .order("scheduled_at", { ascending: false })
+    .range(from, to);
+
+  rows = (data ?? []).map(mapRow);
+  totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
+}
+
+function confirmadasPageUrl(targetPage: number): string {
+  return `/admin/consultas?tab=confirmadas&page=${targetPage}`;
+}
 ---
 
 <AdminLayout title="Consultas">
   <h1 class="text-2xl font-bold text-slate-900">Consultas</h1>
-  <p class="mt-2 text-slate-600">Em construção.</p>
+  <p class="mt-2 text-slate-600">
+    Confirme quem compareceu às consultas e exames passados. Toque em "Realizada" ou "Não
+    compareceu" — dá pra corrigir depois.
+  </p>
+
+  <nav class="mt-6 flex gap-x-6 border-b border-slate-200 text-sm font-medium">
+    <a
+      href={tabUrl("pendentes")}
+      class={`-mb-px border-b-2 pb-2 ${
+        tab === "pendentes" ? "border-sky-700 text-sky-700" : "border-transparent text-slate-600 hover:text-sky-700"
+      }`}
+    >
+      Pendentes
+    </a>
+    <a
+      href={tabUrl("confirmadas")}
+      class={`-mb-px border-b-2 pb-2 ${
+        tab === "confirmadas" ? "border-sky-700 text-sky-700" : "border-transparent text-slate-600 hover:text-sky-700"
+      }`}
+    >
+      Confirmadas
+    </a>
+  </nav>
+
+  {
+    tab === "pendentes" ? (
+      <div class="mt-6 flex max-w-md flex-col gap-3">
+        {cards.length ? (
+          cards.map((card) => (
+            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <p class="text-base font-semibold text-slate-900">{card.patientName}</p>
+              <p class="mt-0.5 text-sm text-slate-600">
+                {card.typeLabel} · {card.locationLabel}
+              </p>
+              <p class="text-sm text-slate-500">{card.whenLabel}</p>
+
+              <div class="mt-3 flex gap-2">
+                <form method="POST" action={`/api/admin/consultas/${card.id}/status`} class="flex-1">
+                  <input type="hidden" name="status" value="completed" />
+                  <input type="hidden" name="tab" value={tab} />
+                  <button
+                    type="submit"
+                    class="w-full rounded-md border border-emerald-700 px-3 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                  >
+                    Realizada
+                  </button>
+                </form>
+                <form method="POST" action={`/api/admin/consultas/${card.id}/status`} class="flex-1">
+                  <input type="hidden" name="status" value="no_show" />
+                  <input type="hidden" name="tab" value={tab} />
+                  <button
+                    type="submit"
+                    class="w-full rounded-md border border-red-700 px-3 py-3 text-sm font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    Não compareceu
+                  </button>
+                </form>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p class="text-slate-500">Nenhuma consulta ou exame pendente de confirmação.</p>
+        )}
+      </div>
+    ) : (
+      <div class="mt-6">
+        <div class="overflow-x-auto rounded-md border border-slate-200 bg-white">
+          <table class="w-full border-collapse text-left text-sm">
+            <thead class="bg-slate-100 text-slate-600">
+              <tr>
+                <th class="px-3 py-2 font-medium">Paciente</th>
+                <th class="px-3 py-2 font-medium">Tipo</th>
+                <th class="px-3 py-2 font-medium">Local</th>
+                <th class="px-3 py-2 font-medium">Data/hora</th>
+                <th class="px-3 py-2 font-medium">Status</th>
+                <th class="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length ? (
+                rows.map((row) => (
+                  <tr class="border-t border-slate-200">
+                    <td class="px-3 py-2">{row.patientName}</td>
+                    <td class="px-3 py-2">{row.typeLabel}</td>
+                    <td class="px-3 py-2">{row.locationLabel}</td>
+                    <td class="px-3 py-2 text-slate-500">{row.whenLabel}</td>
+                    <td class="px-3 py-2">
+                      {row.status === "completed" ? (
+                        <span class="text-emerald-700">Realizada</span>
+                      ) : (
+                        <span class="text-red-700">Não compareceu</span>
+                      )}
+                    </td>
+                    <td class="px-3 py-2 text-right">
+                      <div class="flex justify-end gap-3">
+                        <form method="POST" action={`/api/admin/consultas/${row.id}/status`}>
+                          <input type="hidden" name="status" value="completed" />
+                          <input type="hidden" name="tab" value={tab} />
+                          <input type="hidden" name="page" value={page} />
+                          <button
+                            type="submit"
+                            disabled={row.status === "completed"}
+                            class="text-xs font-medium text-emerald-700 hover:underline disabled:cursor-default disabled:text-slate-300 disabled:no-underline"
+                          >
+                            Marcar realizada
+                          </button>
+                        </form>
+                        <form method="POST" action={`/api/admin/consultas/${row.id}/status`}>
+                          <input type="hidden" name="status" value="no_show" />
+                          <input type="hidden" name="tab" value={tab} />
+                          <input type="hidden" name="page" value={page} />
+                          <button
+                            type="submit"
+                            disabled={row.status === "no_show"}
+                            class="text-xs font-medium text-red-700 hover:underline disabled:cursor-default disabled:text-slate-300 disabled:no-underline"
+                          >
+                            Marcar não compareceu
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr class="border-t border-slate-200">
+                  <td class="px-3 py-4 text-slate-500" colspan="6">
+                    Nenhuma consulta ou exame confirmado ainda.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div class="mt-3 flex items-center justify-between text-sm text-slate-600">
+            <span>
+              Página {page} de {totalPages}
+            </span>
+            <div class="flex gap-3">
+              {page > 1 && (
+                <a href={confirmadasPageUrl(page - 1)} class="text-sky-700 hover:underline">
+                  Anterior
+                </a>
+              )}
+              {page < totalPages && (
+                <a href={confirmadasPageUrl(page + 1)} class="text-sky-700 hover:underline">
+                  Próxima
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 </AdminLayout>
