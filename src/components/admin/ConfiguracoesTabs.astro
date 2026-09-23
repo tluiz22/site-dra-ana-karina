@@ -1,6 +1,6 @@
 ---
 interface Props {
-  current: "disponibilidade" | "duracao" | "valores" | "exames";
+  current: "disponibilidade" | "duracao" | "valores" | "exames" | "contatos";
 }
 
 const { current } = Astro.props;
@@ -10,6 +10,7 @@ const tabs = [
   { id: "duracao", label: "Duração e intervalo", href: "/admin/configuracoes/duracao" },
   { id: "valores", label: "Valores", href: "/admin/configuracoes/valores" },
   { id: "exames", label: "Tipos de exame", href: "/admin/configuracoes/exames" },
+  { id: "contatos", label: "Contatos", href: "/admin/configuracoes/contatos" },
 ] as const;
 ---
 
