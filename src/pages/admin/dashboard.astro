@@ -1,8 +1,80 @@
 ---
+// Fase 9 — resumo do dia. Sem cruzamento com o Google Calendar (mesma
+// escolha da Fase 8): lê só o `status` do Supabase, um resumo aproximado é
+// aceitável aqui, não uma ação crítica. Ver plano, seção "Fase 9".
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import Card from "../../components/admin/Card.astro";
+import Icon from "../../components/admin/Icon.astro";
+import type { IconName } from "../../components/admin/Icon.astro";
+import { createClient } from "../../lib/supabase/server";
+
+const PENDING_WINDOW_DAYS = 60;
+
+const supabase = createClient(Astro.request, Astro.cookies);
+
+const now = new Date();
+
+// Mesma técnica de "hoje" usada em getNextAvailableDates.ts/daily-summary.ts.
+const todayStr = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const todayStart = new Date(`${todayStr}T00:00:00-03:00`);
+const todayEnd = new Date(`${todayStr}T23:59:59.999-03:00`);
+
+const [{ data: todayRows }, { count: pendingCount }] = await Promise.all([
+  supabase
+    .from("appointments")
+    .select("appointment_type")
+    .neq("status", "canceled")
+    .gte("scheduled_at", todayStart.toISOString())
+    .lte("scheduled_at", todayEnd.toISOString()),
+  supabase
+    .from("appointments")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["scheduled", "confirmed"])
+    .lt("scheduled_at", now.toISOString())
+    .gte("scheduled_at", new Date(now.getTime() - PENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString()),
+]);
+
+const appointmentsToday = (todayRows ?? []).filter((row) => row.appointment_type !== "exam").length;
+const examsToday = (todayRows ?? []).length - appointmentsToday;
+
+const shortcuts: { label: string; href: string; icon: IconName }[] = [
+  { label: "Agenda do dia", href: "/admin/agenda", icon: "calendar" },
+  { label: "Marcar consulta", href: "/admin/agenda/marcar", icon: "plus" },
+  { label: "Marcar exame", href: "/admin/agenda/marcar-exame", icon: "plus" },
+  { label: "Consultas pendentes", href: "/admin/consultas", icon: "check-circle" },
+];
 ---
 
 <AdminLayout title="Dashboard">
   <h1 class="text-2xl font-bold text-slate-900">Dashboard</h1>
-  <p class="mt-2 text-slate-600">Em construção.</p>
+  <p class="mt-2 text-slate-600">Resumo de hoje.</p>
+
+  <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <Card class="text-center">
+      <p class="text-3xl font-bold text-sky-700">{appointmentsToday}</p>
+      <p class="mt-1 text-sm text-slate-600">Consultas hoje</p>
+    </Card>
+    <Card class="text-center">
+      <p class="text-3xl font-bold text-sky-700">{examsToday}</p>
+      <p class="mt-1 text-sm text-slate-600">Exames hoje</p>
+    </Card>
+    <Card class="col-span-2 text-center sm:col-span-1">
+      <p class="text-3xl font-bold text-amber-600">{pendingCount ?? 0}</p>
+      <p class="mt-1 text-sm text-slate-600">Pendentes de confirmação</p>
+    </Card>
+  </div>
+
+  <h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-500">Atalhos</h2>
+  <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+    {
+      shortcuts.map((shortcut) => (
+        <a href={shortcut.href}>
+          <Card class="flex h-full flex-col items-center gap-2 text-center hover:border-sky-300 hover:bg-sky-50">
+            <Icon name={shortcut.icon} class="h-6 w-6 text-sky-700" />
+            <span class="text-sm font-medium text-slate-700">{shortcut.label}</span>
+          </Card>
+        </a>
+      ))
+    }
+  </div>
 </AdminLayout>
