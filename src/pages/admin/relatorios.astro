@@ -1,8 +1,195 @@
 ---
+// Fase 9 — métricas mensais. Sem gráfico e sem exportação nesta primeira
+// versão (decisão do cliente) — tabelas simples, consistente com o resto do
+// admin. Ver plano, seção "Fase 9".
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import Icon from "../../components/admin/Icon.astro";
+import { createClient } from "../../lib/supabase/server";
+
+const supabase = createClient(Astro.request, Astro.cookies);
+
+function todayFortaleza(): string {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function addMonths(monthStr: string, delta: number): string {
+  const [year, month] = monthStr.split("-").map(Number);
+  const totalMonths = year * 12 + (month - 1) + delta;
+  const newYear = Math.floor(totalMonths / 12);
+  const newMonth = (totalMonths % 12) + 1;
+  return `${newYear}-${String(newMonth).padStart(2, "0")}`;
+}
+
+const monthNames = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+const monthParam = Astro.url.searchParams.get("month");
+const currentMonth = todayFortaleza().slice(0, 7);
+const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : currentMonth;
+const [monthYear, monthNum] = month.split("-").map(Number);
+
+const monthStart = new Date(`${month}-01T00:00:00-03:00`);
+const monthEnd = new Date(`${addMonths(month, 1)}-01T00:00:00-03:00`);
+
+interface Row {
+  appointment_type: "first_visit" | "return_visit" | "exam";
+  status: string;
+  clinic_locations: { type: string } | { type: string }[] | null;
+}
+
+const { data } = await supabase
+  .from("appointments")
+  .select("appointment_type, status, clinic_locations ( type )")
+  .gte("scheduled_at", monthStart.toISOString())
+  .lt("scheduled_at", monthEnd.toISOString());
+
+const rows = (data ?? []) as Row[];
+
+function locationType(row: Row): string | undefined {
+  const location = Array.isArray(row.clinic_locations) ? row.clinic_locations[0] : row.clinic_locations;
+  return location?.type;
+}
+
+// Volume do mês: quebrado por tipo × local, exclui cancelado (não ocupou
+// de fato a agenda). Conta o que ainda está scheduled/confirmed se o mês
+// corrente não terminou — fácil de restringir a completed/no_show depois,
+// se preferir.
+const volumeCategories = [
+  { label: "Consulta – Consultório", match: (r: Row) => r.appointment_type === "first_visit" && locationType(r) === "clinic" },
+  { label: "Consulta – Domiciliar", match: (r: Row) => r.appointment_type === "first_visit" && locationType(r) === "home_visit" },
+  { label: "Retorno – Consultório", match: (r: Row) => r.appointment_type === "return_visit" && locationType(r) === "clinic" },
+  { label: "Retorno – Domiciliar", match: (r: Row) => r.appointment_type === "return_visit" && locationType(r) === "home_visit" },
+  { label: "Exame", match: (r: Row) => r.appointment_type === "exam" },
+];
+
+const nonCanceledRows = rows.filter((r) => r.status !== "canceled");
+const volumeRows = volumeCategories.map((category) => ({
+  label: category.label,
+  count: nonCanceledRows.filter(category.match).length,
+}));
+const volumeTotal = nonCanceledRows.length;
+
+// Taxa de não comparecimento: só entre desfechos já decididos (completed/no_show).
+function noShowRate(matching: Row[]): { completed: number; noShow: number; rate: number | null } {
+  const completed = matching.filter((r) => r.status === "completed").length;
+  const noShow = matching.filter((r) => r.status === "no_show").length;
+  const decided = completed + noShow;
+  return { completed, noShow, rate: decided > 0 ? noShow / decided : null };
+}
+
+const noShowCategories = [
+  { label: "Consulta", rows: rows.filter((r) => r.appointment_type === "first_visit") },
+  { label: "Retorno", rows: rows.filter((r) => r.appointment_type === "return_visit") },
+  { label: "Exame", rows: rows.filter((r) => r.appointment_type === "exam") },
+];
+
+const noShowRows = noShowCategories.map((category) => ({
+  label: category.label,
+  ...noShowRate(category.rows),
+}));
+const noShowTotalRow = { label: "Total geral", ...noShowRate(rows) };
+
+function formatPercent(rate: number | null): string {
+  return rate === null ? "—" : `${Math.round(rate * 100)}%`;
+}
 ---
 
 <AdminLayout title="Relatórios">
   <h1 class="text-2xl font-bold text-slate-900">Relatórios</h1>
-  <p class="mt-2 text-slate-600">Em construção.</p>
+  <p class="mt-2 text-slate-600">Métricas mensais de atendimento.</p>
+
+  <div class="mt-6 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2 sm:max-w-sm">
+    <a
+      href={`/admin/relatorios?month=${addMonths(month, -1)}`}
+      aria-label="Mês anterior"
+      class="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-sky-700"
+    >
+      <Icon name="chevron-left" class="h-5 w-5" />
+    </a>
+    <div class="flex flex-wrap items-center justify-center gap-2">
+      <p class="text-sm font-medium text-slate-900">
+        {monthNames[monthNum - 1]} de {monthYear}
+      </p>
+      {
+        month !== currentMonth && (
+          <a
+            href="/admin/relatorios"
+            class="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Mês atual
+          </a>
+        )
+      }
+    </div>
+    <a
+      href={`/admin/relatorios?month=${addMonths(month, 1)}`}
+      aria-label="Próximo mês"
+      class="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-sky-700"
+    >
+      <Icon name="chevron-right" class="h-5 w-5" />
+    </a>
+  </div>
+
+  <h2 class="mt-8 text-base font-semibold text-slate-900">Volume de atendimentos</h2>
+  <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <table class="w-full min-w-[420px] border-collapse text-left text-sm">
+      <thead class="bg-slate-50 text-slate-600">
+        <tr>
+          <th class="px-3 py-2 font-medium">Tipo</th>
+          <th class="px-3 py-2 text-right font-medium">Quantidade</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          volumeRows.map((row) => (
+            <tr class="border-t border-slate-200">
+              <td class="px-3 py-2">{row.label}</td>
+              <td class="px-3 py-2 text-right">{row.count}</td>
+            </tr>
+          ))
+        }
+        <tr class="border-t border-slate-200 font-semibold text-slate-900">
+          <td class="px-3 py-2">Total</td>
+          <td class="px-3 py-2 text-right">{volumeTotal}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="mt-8 text-base font-semibold text-slate-900">Taxa de não comparecimento</h2>
+  <p class="mt-1 text-sm text-slate-500">
+    Só considera atendimentos já com desfecho decidido (Realizada ou Não compareceu).
+  </p>
+  <div class="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <table class="w-full min-w-[520px] border-collapse text-left text-sm">
+      <thead class="bg-slate-50 text-slate-600">
+        <tr>
+          <th class="px-3 py-2 font-medium">Tipo</th>
+          <th class="px-3 py-2 text-right font-medium">Realizadas</th>
+          <th class="px-3 py-2 text-right font-medium">Não compareceu</th>
+          <th class="px-3 py-2 text-right font-medium">Taxa</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          noShowRows.map((row) => (
+            <tr class="border-t border-slate-200">
+              <td class="px-3 py-2">{row.label}</td>
+              <td class="px-3 py-2 text-right">{row.completed}</td>
+              <td class="px-3 py-2 text-right">{row.noShow}</td>
+              <td class="px-3 py-2 text-right">{formatPercent(row.rate)}</td>
+            </tr>
+          ))
+        }
+        <tr class="border-t border-slate-200 font-semibold text-slate-900">
+          <td class="px-3 py-2">{noShowTotalRow.label}</td>
+          <td class="px-3 py-2 text-right">{noShowTotalRow.completed}</td>
+          <td class="px-3 py-2 text-right">{noShowTotalRow.noShow}</td>
+          <td class="px-3 py-2 text-right">{formatPercent(noShowTotalRow.rate)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </AdminLayout>
