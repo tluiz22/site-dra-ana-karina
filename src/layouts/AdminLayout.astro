@@ -37,6 +37,18 @@ const isMoreActive = moreNavItems.some((item) => isActive(item.href));
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>{title} | Painel do consultório</title>
     <meta name="robots" content="noindex, nofollow" />
+
+    <!-- PWA instalável (ícone na tela inicial do celular) — escopado só ao
+         /admin, sem service worker (painel só faz sentido com internet).
+         Ver plano, "Etapa seguinte, planejada — PWA instalável". -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/admin-icon-192.png" />
+    <meta name="theme-color" content="#0369a1" />
+    <!-- Safari não segue o manifest sozinho, precisa destas tags à parte. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Consultório" />
+    <link rel="apple-touch-icon" href="/admin-apple-touch-icon.png" />
     <style>
       /* Esconde o marcador padrão do <details>/<summary> (seta/triângulo) —
          usado no botão "Mais" da barra inferior, sem precisar de JS. */
