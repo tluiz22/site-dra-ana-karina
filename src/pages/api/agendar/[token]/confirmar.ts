@@ -121,6 +121,24 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     appointmentType === "exam" ? examType?.price_cents : appointmentType === "return_visit" ? null : location?.price_first_visit_cents;
   const typeLabel = buildAppointmentTypeLabel(appointmentType, examType?.name);
 
+  // Trava atômica contra corrida (duplo toque em "Confirmar", conexão
+  // lenta): a checagem de `link.used_at` lá em cima não impede duas
+  // requisições concorrentes de passarem juntas e criarem duas consultas
+  // pro mesmo link. Esse UPDATE condicional só afeta a linha se `used_at`
+  // ainda estiver nulo — a segunda requisição a chegar aqui recebe 0 linhas
+  // e para, sem duplicar o agendamento.
+  const { data: claimedLink } = await supabase
+    .from("booking_links")
+    .update({ used_at: new Date().toISOString() })
+    .eq("id", token)
+    .is("used_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (!claimedLink) {
+    return redirect(`/agendar/${token}`);
+  }
+
   let appointmentId: string;
 
   if (link.mode === "reschedule") {
@@ -234,12 +252,10 @@ export const POST: APIRoute = async ({ params, request, redirect }) => {
     }
   }
 
-  // Uso único: marca o link como usado e guarda a consulta gerada, para a
-  // página mostrar a confirmação mesmo se o link for reaberto depois.
-  await supabase
-    .from("booking_links")
-    .update({ used_at: new Date().toISOString(), appointment_id: appointmentId })
-    .eq("id", token);
+  // `used_at` já foi gravado atomicamente acima — só falta guardar a
+  // consulta gerada, para a página mostrar a confirmação mesmo se o link
+  // for reaberto depois.
+  await supabase.from("booking_links").update({ appointment_id: appointmentId }).eq("id", token);
 
   return redirect(`/agendar/${token}`);
 };
