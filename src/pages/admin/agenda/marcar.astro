@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import Card from "../../../components/admin/Card.astro";
+import Icon from "../../../components/admin/Icon.astro";
 import { createClient } from "../../../lib/supabase/server";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../lib/scheduling/getAvailableSlotsForDate";
 import { resolveClinicLocationIds, type LocationCategory } from "../../../lib/scheduling/resolveClinicLocationIds";
@@ -61,112 +63,128 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
 ---
 
 <AdminLayout title="Marcar consulta">
-  <a href={`/admin/agenda?date=${date}`} class="text-sm text-sky-700 hover:underline">&larr; Agenda</a>
+  <a
+    href={`/admin/agenda?date=${date}`}
+    class="inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:underline"
+  >
+    <Icon name="chevron-left" class="h-4 w-4" />
+    Agenda
+  </a>
 
   <h1 class="mt-3 text-2xl font-bold text-slate-900">Marcar consulta</h1>
 
   {
     errorMessage && (
-      <p class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+      <p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
     )
   }
 
-  <form method="POST" action="/api/admin/agenda/appointments" class="mt-6 flex max-w-xl flex-col gap-6">
-    <div class="flex flex-wrap items-end gap-3">
-      <div>
-        <label for="location_category" class="block text-sm font-medium text-slate-700">Local</label>
-        <select
-          id="location_category"
-          name="location_category"
-          class="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
-        >
-          {
-            categoryOptions.map((option) => (
-              <option value={option.value} selected={option.value === locationCategory}>{option.label}</option>
-            ))
-          }
-        </select>
+  <Card class="mt-6 max-w-xl">
+    <form method="POST" action="/api/admin/agenda/appointments" class="flex flex-col gap-6">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <label for="location_category" class="block text-sm font-medium text-slate-700">Local</label>
+          <select
+            id="location_category"
+            name="location_category"
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          >
+            {
+              categoryOptions.map((option) => (
+                <option value={option.value} selected={option.value === locationCategory}>{option.label}</option>
+              ))
+            }
+          </select>
+        </div>
+        <div>
+          <label for="date" class="block text-sm font-medium text-slate-700">Data</label>
+          <input
+            type="date"
+            id="date"
+            name="date"
+            value={date}
+            min={todayFortaleza()}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+          <p id="date_availability_warning" class="mt-1 hidden text-xs text-amber-700"></p>
+        </div>
+        <div>
+          <label for="appointment_type" class="block text-sm font-medium text-slate-700">Tipo</label>
+          <select
+            id="appointment_type"
+            name="appointment_type"
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          >
+            <option value="first_visit" selected={appointmentType === "first_visit"}>Consulta</option>
+            <option value="return_visit" selected={appointmentType === "return_visit"}>Retorno</option>
+          </select>
+        </div>
       </div>
+
       <div>
-        <label for="date" class="block text-sm font-medium text-slate-700">Data</label>
+        <label for="patient_search" class="block text-sm font-medium text-slate-700">Paciente</label>
         <input
-          type="date"
-          id="date"
-          name="date"
-          value={date}
-          min={todayFortaleza()}
-          class="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+          type="text"
+          id="patient_search"
+          autocomplete="off"
+          placeholder="Buscar pelo nome da criança ou telefone do responsável"
+          class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
         />
-        <p id="date_availability_warning" class="mt-1 hidden text-xs text-amber-700"></p>
+        <input type="hidden" id="patient_id" name="patient_id" required />
+        <div id="patient_results" class="mt-1 flex flex-col overflow-hidden rounded-lg border border-slate-200 empty:hidden empty:border-0"></div>
+        <p id="patient_warning" class="mt-1 hidden text-xs text-amber-700"></p>
+        <p class="mt-1 text-xs text-slate-500">
+          Não encontrou?{" "}
+          <a href="/admin/pacientes" target="_blank" class="text-sky-700 hover:underline">
+            Cadastrar novo paciente
+          </a>{" "}
+          (abre em outra aba).
+        </p>
       </div>
+
       <div>
-        <label for="appointment_type" class="block text-sm font-medium text-slate-700">Tipo</label>
-        <select
-          id="appointment_type"
-          name="appointment_type"
-          class="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+        <span class="block text-sm font-medium text-slate-700">Horário</span>
+        <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
+          {
+            slots.length ? (
+              slots.map((slot) => (
+                <label class="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50 has-[:checked]:text-sky-700">
+                  <input
+                    type="radio"
+                    name="start"
+                    value={`${slot.start.toISOString()}|${slot.clinicLocationId}`}
+                    required
+                    class="mr-1"
+                  />
+                  {slot.label}
+                </label>
+              ))
+            ) : (
+              <p class="text-sm text-slate-500">
+                Nenhum horário livre para essa data/local. Tente outra data.
+              </p>
+            )
+          }
+        </div>
+      </div>
+
+      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+        <a
+          href={`/admin/agenda?date=${date}`}
+          class="w-full rounded-md border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:w-fit"
         >
-          <option value="first_visit" selected={appointmentType === "first_visit"}>Consulta</option>
-          <option value="return_visit" selected={appointmentType === "return_visit"}>Retorno</option>
-        </select>
+          Cancelar
+        </a>
+        <button
+          id="submit_btn"
+          type="submit"
+          class="w-full rounded-md bg-sky-700 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-fit"
+        >
+          Confirmar agendamento
+        </button>
       </div>
-    </div>
-
-    <div>
-      <label for="patient_search" class="block text-sm font-medium text-slate-700">Paciente</label>
-      <input
-        type="text"
-        id="patient_search"
-        autocomplete="off"
-        placeholder="Buscar pelo nome da criança ou telefone do responsável"
-        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-      />
-      <input type="hidden" id="patient_id" name="patient_id" required />
-      <div id="patient_results" class="mt-1 flex flex-col overflow-hidden rounded-md border border-slate-200 empty:hidden empty:border-0"></div>
-      <p id="patient_warning" class="mt-1 hidden text-xs text-amber-700"></p>
-      <p class="mt-1 text-xs text-slate-500">
-        Não encontrou?{" "}
-        <a href="/admin/pacientes" target="_blank" class="text-sky-700 hover:underline">
-          Cadastrar novo paciente
-        </a>{" "}
-        (abre em outra aba).
-      </p>
-    </div>
-
-    <div>
-      <span class="block text-sm font-medium text-slate-700">Horário</span>
-      <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
-        {
-          slots.length ? (
-            slots.map((slot) => (
-              <label class="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50">
-                <input
-                  type="radio"
-                  name="start"
-                  value={`${slot.start.toISOString()}|${slot.clinicLocationId}`}
-                  required
-                  class="mr-1"
-                />
-                {slot.label}
-              </label>
-            ))
-          ) : (
-            <p class="text-sm text-slate-500">
-              Nenhum horário livre para essa data/local. Tente outra data.
-            </p>
-          )
-        }
-      </div>
-    </div>
-
-    <button
-      id="submit_btn"
-      type="submit"
-      class="w-fit rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      Confirmar agendamento
-    </button>
-  </form>
+    </form>
+  </Card>
 </AdminLayout>
 
 <script define:vars={{ availableWeekdaysByCategory }} is:inline>

@@ -55,7 +55,7 @@ async function refreshSlots() {
   slots.forEach((slot: { start: string; label: string; clinicLocationId: string }) => {
     const label = document.createElement("label");
     label.className =
-      "cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50";
+      "cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50 has-[:checked]:text-sky-700";
     const input = document.createElement("input");
     input.type = "radio";
     input.name = "start";
