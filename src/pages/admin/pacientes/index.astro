@@ -1,5 +1,8 @@
 ---
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import Card from "../../../components/admin/Card.astro";
+import Badge from "../../../components/admin/Badge.astro";
+import ConfirmDeleteDialog from "../../../components/admin/ConfirmDeleteDialog.astro";
 import { createClient } from "../../../lib/supabase/server";
 
 const PAGE_SIZE = 20;
@@ -15,28 +18,42 @@ const errorMessages: Record<string, string> = {
 const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
 
+const tabParam = Astro.url.searchParams.get("tab");
+const tab: "cadastrados" | "cadastrar" = tabParam === "cadastrar" ? "cadastrar" : "cadastrados";
+
 const q = Astro.url.searchParams.get("q")?.trim() ?? "";
+const showInactive = Astro.url.searchParams.get("show_inactive") === "1";
 const page = Math.max(1, Number(Astro.url.searchParams.get("page")) || 1);
 const from = (page - 1) * PAGE_SIZE;
 const to = from + PAGE_SIZE - 1;
 
-let guardiansQuery = supabase
-  .from("guardians")
-  .select("id, full_name, phone, patients(count)", { count: "exact" })
-  .eq("is_active", true)
-  .order("full_name")
-  .range(from, to);
+let guardians: { id: string; full_name: string; phone: string; is_active: boolean; patients: unknown }[] = [];
+let totalPages = 1;
 
-if (q) {
-  guardiansQuery = guardiansQuery.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
+if (tab === "cadastrados") {
+  let guardiansQuery = supabase
+    .from("guardians")
+    .select("id, full_name, phone, is_active, patients(count)", { count: "exact" })
+    .order("full_name")
+    .range(from, to);
+
+  if (!showInactive) guardiansQuery = guardiansQuery.eq("is_active", true);
+  if (q) guardiansQuery = guardiansQuery.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
+
+  const { data, count } = await guardiansQuery;
+  guardians = data ?? [];
+  totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
 }
 
-const { data: guardians, count } = await guardiansQuery;
-const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
+function tabUrl(target: "cadastrados" | "cadastrar"): string {
+  return `/admin/pacientes?tab=${target}`;
+}
 
 function pageUrl(targetPage: number): string {
   const params = new URLSearchParams();
+  params.set("tab", "cadastrados");
   if (q) params.set("q", q);
+  if (showInactive) params.set("show_inactive", "1");
   params.set("page", String(targetPage));
   return `/admin/pacientes?${params.toString()}`;
 }
@@ -49,121 +66,148 @@ function pageUrl(targetPage: number): string {
     telefone (ex.: prefeitura conveniada agendando por várias crianças).
   </p>
 
+  <nav class="mt-6 flex gap-x-6 border-b border-slate-200 text-sm font-medium">
+    <a
+      href={tabUrl("cadastrados")}
+      class={`-mb-px border-b-2 pb-2 ${
+        tab === "cadastrados" ? "border-sky-700 text-sky-700" : "border-transparent text-slate-600 hover:text-sky-700"
+      }`}
+    >
+      Cadastrados
+    </a>
+    <a
+      href={tabUrl("cadastrar")}
+      class={`-mb-px border-b-2 pb-2 ${
+        tab === "cadastrar" ? "border-sky-700 text-sky-700" : "border-transparent text-slate-600 hover:text-sky-700"
+      }`}
+    >
+      Cadastrar
+    </a>
+  </nav>
+
   {
     errorMessage && (
-      <p class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+      <p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
     )
   }
 
-  <section class="mt-6">
-    <h2 class="text-lg font-semibold text-slate-900">Cadastrar</h2>
-    <p class="mt-1 text-sm text-slate-600">
+  {tab === "cadastrar" && (
+    <section class="mt-6">
+    <p class="text-sm text-slate-600">
       Se o telefone já existir, a criança é adicionada ao responsável existente.
     </p>
 
-    <form
-      method="POST"
-      action="/api/admin/pacientes"
-      class="mt-4 grid max-w-xl grid-cols-1 gap-3 rounded-md border border-slate-200 bg-white p-4 sm:grid-cols-2"
-    >
-      <div>
-        <label for="guardian_full_name" class="block text-sm font-medium text-slate-700">
-          Nome do responsável
-        </label>
-        <input
-          type="text"
-          id="guardian_full_name"
-          name="guardian_full_name"
-          required
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label for="guardian_phone" class="block text-sm font-medium text-slate-700">
-          Telefone
-        </label>
-        <input
-          type="tel"
-          id="guardian_phone"
-          name="guardian_phone"
-          placeholder="84981880777"
-          required
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-        <p class="mt-1 text-xs text-slate-500">
-          Sem o +55 informado, ele é adicionado automaticamente.
-        </p>
-      </div>
-      <div>
-        <label for="patient_full_name" class="block text-sm font-medium text-slate-700">
-          Nome da criança
-        </label>
-        <input
-          type="text"
-          id="patient_full_name"
-          name="patient_full_name"
-          required
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label for="patient_birthdate" class="block text-sm font-medium text-slate-700">
-          Data de nascimento
-        </label>
-        <input
-          type="date"
-          id="patient_birthdate"
-          name="patient_birthdate"
-          min="1900-01-01"
-          max={new Date().toISOString().slice(0, 10)}
-          required
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div class="sm:col-span-2">
-        <label for="patient_notes" class="block text-sm font-medium text-slate-700">
-          Observação (operacional, não clínica)
-        </label>
-        <input
-          type="text"
-          id="patient_notes"
-          name="patient_notes"
-          placeholder="ex.: prefere período da manhã"
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <button
-        type="submit"
-        class="mt-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 sm:col-span-2 sm:w-fit"
-      >
-        Cadastrar
-      </button>
-    </form>
-  </section>
-
-  <section class="mt-10">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold text-slate-900">Cadastrados</h2>
-      <form method="GET" action="/admin/pacientes" class="flex gap-2">
-        <input
-          type="search"
-          name="q"
-          value={q}
-          placeholder="Buscar por nome ou telefone"
-          class="w-64 rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
+    <Card class="mt-4 max-w-xl">
+      <form method="POST" action="/api/admin/pacientes" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label for="guardian_full_name" class="block text-sm font-medium text-slate-700">
+            Nome do responsável
+          </label>
+          <input
+            type="text"
+            id="guardian_full_name"
+            name="guardian_full_name"
+            required
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="guardian_phone" class="block text-sm font-medium text-slate-700">
+            Telefone
+          </label>
+          <input
+            type="tel"
+            id="guardian_phone"
+            name="guardian_phone"
+            placeholder="84981880777"
+            required
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            Sem o +55 informado, ele é adicionado automaticamente.
+          </p>
+        </div>
+        <div>
+          <label for="patient_full_name" class="block text-sm font-medium text-slate-700">
+            Nome da criança
+          </label>
+          <input
+            type="text"
+            id="patient_full_name"
+            name="patient_full_name"
+            required
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="patient_birthdate" class="block text-sm font-medium text-slate-700">
+            Data de nascimento
+          </label>
+          <input
+            type="date"
+            id="patient_birthdate"
+            name="patient_birthdate"
+            min="1900-01-01"
+            max={new Date().toISOString().slice(0, 10)}
+            required
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div class="sm:col-span-2">
+          <label for="patient_notes" class="block text-sm font-medium text-slate-700">
+            Observação (operacional, não clínica)
+          </label>
+          <input
+            type="text"
+            id="patient_notes"
+            name="patient_notes"
+            placeholder="ex.: prefere período da manhã"
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
         <button
           type="submit"
-          class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+          class="mt-2 w-full rounded-md bg-sky-700 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-800 sm:col-span-2 sm:w-fit"
         >
-          Buscar
+          Cadastrar
         </button>
       </form>
-    </div>
+    </Card>
+    </section>
+  )}
 
-    <div class="mt-4 overflow-x-auto rounded-md border border-slate-200 bg-white">
-      <table class="w-full border-collapse text-left text-sm">
-        <thead class="bg-slate-100 text-slate-600">
+  {tab === "cadastrados" && (
+  <section class="mt-6">
+    <form method="GET" action="/admin/pacientes" class="flex flex-wrap items-center gap-3">
+      <input type="hidden" name="tab" value="cadastrados" />
+      <input
+        type="search"
+        name="q"
+        value={q}
+        placeholder="Buscar por nome ou telefone"
+        class="w-64 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+      />
+      <label class="flex items-center gap-1.5 text-sm text-slate-600">
+        <input
+          type="checkbox"
+          name="show_inactive"
+          value="1"
+          checked={showInactive}
+          class="rounded border-slate-300 text-sky-700 focus:ring-sky-600"
+        />
+        Mostrar inativos
+      </label>
+      <button
+        type="submit"
+        class="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+      >
+        Buscar
+      </button>
+    </form>
+
+    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table class="w-full min-w-[640px] border-collapse text-left text-sm">
+        <thead class="bg-slate-50 text-slate-600">
           <tr>
             <th class="px-3 py-2 font-medium">Responsável</th>
             <th class="px-3 py-2 font-medium">Telefone</th>
@@ -173,28 +217,53 @@ function pageUrl(targetPage: number): string {
         </thead>
         <tbody>
           {
-            guardians?.length ? (
+            guardians.length ? (
               guardians.map((guardian) => (
                 <tr class="border-t border-slate-200">
-                  <td class="px-3 py-2">{guardian.full_name}</td>
+                  <td class="px-3 py-2">
+                    {guardian.full_name}
+                    {!guardian.is_active && (
+                      <Badge variant="neutral" class="ml-2 align-middle">
+                        Inativo
+                      </Badge>
+                    )}
+                  </td>
                   <td class="px-3 py-2 text-slate-500">{guardian.phone}</td>
                   <td class="px-3 py-2">{(guardian.patients as any)?.[0]?.count ?? 0}</td>
-                  <td class="px-3 py-2 text-right">
-                    <div class="flex justify-end gap-3">
-                      <a href={`/admin/pacientes/${guardian.id}`} class="text-sky-700 hover:underline">
+                  <td class="whitespace-nowrap px-3 py-2 text-right">
+                    <div class="flex flex-nowrap justify-end gap-1.5">
+                      <a
+                        href={`/admin/pacientes/${guardian.id}`}
+                        class="rounded-md border border-sky-300 px-2.5 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-50"
+                      >
                         Ver
                       </a>
                       <a
                         href={`/admin/pacientes/${guardian.id}/editar`}
-                        class="text-slate-600 hover:underline"
+                        class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
                       >
                         Editar
                       </a>
-                      <form method="POST" action={`/api/admin/pacientes/${guardian.id}/excluir`}>
-                        <button type="submit" class="text-red-700 hover:underline">
-                          Excluir
-                        </button>
-                      </form>
+                      {guardian.is_active ? (
+                        <form method="POST" action={`/api/admin/pacientes/${guardian.id}/excluir`}>
+                          <button
+                            type="submit"
+                            class="js-confirm-delete rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+                            data-confirm-message={`Excluir ${guardian.full_name}? Fica marcado como inativo — os dados continuam guardados e dá pra reativar depois em "Mostrar inativos".`}
+                          >
+                            Excluir
+                          </button>
+                        </form>
+                      ) : (
+                        <form method="POST" action={`/api/admin/pacientes/${guardian.id}/reativar`}>
+                          <button
+                            type="submit"
+                            class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                          >
+                            Reativar
+                          </button>
+                        </form>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -229,4 +298,7 @@ function pageUrl(targetPage: number): string {
       )
     }
   </section>
+  )}
+
+  <ConfirmDeleteDialog />
 </AdminLayout>
