@@ -5,6 +5,9 @@
 // grid com paginação — mesmo padrão da tela de Pacientes — em vez de cards.
 // Ver plano, seção "Fase 8".
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import Card from "../../../components/admin/Card.astro";
+import Badge from "../../../components/admin/Badge.astro";
+import type { BadgeVariant } from "../../../components/admin/Badge.astro";
 import { createClient } from "../../../lib/supabase/server";
 import { buildAppointmentTypeLabel } from "../../../lib/whatsapp/notifications";
 import { formatWhen } from "../../../lib/whatsapp/formatDateTime";
@@ -25,6 +28,12 @@ function locationLabel(type: string | undefined): string {
   return "Domiciliar";
 }
 
+function typeBadgeVariant(type: string): BadgeVariant {
+  if (type === "exam") return "warning";
+  if (type === "return_visit") return "accent";
+  return "info";
+}
+
 function mapRow(a: {
   id: string;
   scheduled_at: string;
@@ -42,6 +51,7 @@ function mapRow(a: {
     id: a.id,
     patientName: patient?.full_name ?? "Paciente",
     typeLabel: buildAppointmentTypeLabel(a.appointment_type, examType?.name),
+    typeVariant: typeBadgeVariant(a.appointment_type),
     locationLabel: locationLabel(location?.type),
     whenLabel: formatWhen(new Date(a.scheduled_at)),
     status: a.status,
@@ -123,12 +133,13 @@ function confirmadasPageUrl(targetPage: number): string {
       <div class="mt-6 flex max-w-md flex-col gap-3">
         {cards.length ? (
           cards.map((card) => (
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <Card>
               <p class="text-base font-semibold text-slate-900">{card.patientName}</p>
-              <p class="mt-0.5 text-sm text-slate-600">
-                {card.typeLabel} · {card.locationLabel}
-              </p>
-              <p class="text-sm text-slate-500">{card.whenLabel}</p>
+              <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                <Badge variant={card.typeVariant}>{card.typeLabel}</Badge>
+                <span class="text-sm text-slate-500">{card.locationLabel}</span>
+              </div>
+              <p class="mt-1 text-sm text-slate-500">{card.whenLabel}</p>
 
               <div class="mt-3 flex gap-2">
                 <form method="POST" action={`/api/admin/consultas/${card.id}/status`} class="flex-1">
@@ -152,17 +163,17 @@ function confirmadasPageUrl(targetPage: number): string {
                   </button>
                 </form>
               </div>
-            </div>
+            </Card>
           ))
         ) : (
-          <p class="text-slate-500">Nenhuma consulta ou exame pendente de confirmação.</p>
+          <Card class="text-slate-500">Nenhuma consulta ou exame pendente de confirmação.</Card>
         )}
       </div>
     ) : (
       <div class="mt-6">
-        <div class="overflow-x-auto rounded-md border border-slate-200 bg-white">
-          <table class="w-full border-collapse text-left text-sm">
-            <thead class="bg-slate-100 text-slate-600">
+        <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table class="w-full min-w-[720px] border-collapse text-left text-sm">
+            <thead class="bg-slate-50 text-slate-600">
               <tr>
                 <th class="px-3 py-2 font-medium">Paciente</th>
                 <th class="px-3 py-2 font-medium">Tipo</th>
@@ -177,18 +188,18 @@ function confirmadasPageUrl(targetPage: number): string {
                 rows.map((row) => (
                   <tr class="border-t border-slate-200">
                     <td class="px-3 py-2">{row.patientName}</td>
-                    <td class="px-3 py-2">{row.typeLabel}</td>
-                    <td class="px-3 py-2">{row.locationLabel}</td>
+                    <td class="px-3 py-2">
+                      <Badge variant={row.typeVariant}>{row.typeLabel}</Badge>
+                    </td>
+                    <td class="px-3 py-2 text-slate-500">{row.locationLabel}</td>
                     <td class="px-3 py-2 text-slate-500">{row.whenLabel}</td>
                     <td class="px-3 py-2">
-                      {row.status === "completed" ? (
-                        <span class="text-emerald-700">Realizada</span>
-                      ) : (
-                        <span class="text-red-700">Não compareceu</span>
-                      )}
+                      <Badge variant={row.status === "completed" ? "success" : "danger"}>
+                        {row.status === "completed" ? "Realizada" : "Não compareceu"}
+                      </Badge>
                     </td>
-                    <td class="px-3 py-2 text-right">
-                      <div class="flex justify-end gap-3">
+                    <td class="whitespace-nowrap px-3 py-2 text-right">
+                      <div class="flex flex-nowrap justify-end gap-1.5">
                         <form method="POST" action={`/api/admin/consultas/${row.id}/status`}>
                           <input type="hidden" name="status" value="completed" />
                           <input type="hidden" name="tab" value={tab} />
@@ -196,7 +207,7 @@ function confirmadasPageUrl(targetPage: number): string {
                           <button
                             type="submit"
                             disabled={row.status === "completed"}
-                            class="text-xs font-medium text-emerald-700 hover:underline disabled:cursor-default disabled:text-slate-300 disabled:no-underline"
+                            class="rounded-md border border-emerald-200 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-default disabled:border-slate-200 disabled:text-slate-300 disabled:hover:bg-transparent"
                           >
                             Marcar realizada
                           </button>
@@ -208,7 +219,7 @@ function confirmadasPageUrl(targetPage: number): string {
                           <button
                             type="submit"
                             disabled={row.status === "no_show"}
-                            class="text-xs font-medium text-red-700 hover:underline disabled:cursor-default disabled:text-slate-300 disabled:no-underline"
+                            class="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-default disabled:border-slate-200 disabled:text-slate-300 disabled:hover:bg-transparent"
                           >
                             Marcar não compareceu
                           </button>
