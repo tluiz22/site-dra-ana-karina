@@ -37,6 +37,11 @@ interface NotificationInput {
   // confirmação — pedido do cliente, para o responsável já saber o valor e a
   // forma de pagamento na primeira mensagem que recebe.
   priceCents?: number | null;
+  // URL de `/agendar/[token]` pra remarcar — só o cancelamento em massa
+  // (Fase 12) usa, com um `booking_links` de validade mais longa (a
+  // notificação é passiva, sem conversa ativa pra justificar os 30min
+  // padrão do bot).
+  link?: string;
 }
 
 interface NotificationSpec {
@@ -52,13 +57,17 @@ interface NotificationSpec {
   // Quando true, adiciona o valor da consulta como próxima variável — só a
   // confirmação usa.
   includePrice?: boolean;
+  // Quando true, adiciona o link de agendamento como próxima variável — só
+  // o cancelamento em massa (Fase 12) usa.
+  includeLink?: boolean;
   buildPreview: (
     typeLabel: string,
     patientName: string,
     whenLabel: string,
     locationLabel: string,
     addressText: string | null,
-    priceText: string | null
+    priceText: string | null,
+    link: string | null
   ) => string;
 }
 
@@ -108,6 +117,7 @@ async function sendNotification(
     locationLabel,
     locationAddress,
     priceCents,
+    link,
   }: NotificationInput,
   spec: NotificationSpec
 ): Promise<string> {
@@ -116,17 +126,19 @@ async function sendNotification(
   const whenLabel = formatWhen(scheduledAt);
   const addressText = spec.includeAddress ? buildLocationAddressText(locationAddress) : null;
   const priceText = spec.includePrice ? buildPriceText(priceCents) : null;
+  const linkText = spec.includeLink ? (link ?? null) : null;
 
   // Ordem dos parâmetros ({{1}} tipo, {{2}} nome, {{3}} data-hora, {{4}}
-  // local, {{5}} endereço, {{6}} valor) precisa bater com o corpo do
-  // template aprovado na Meta — endereço e valor só entram quando a
-  // notificação os usa. "Tipo" entra em set/2026 pra reaproveitar os mesmos
+  // local, {{5}} endereço/valor/link) precisa bater com o corpo do template
+  // aprovado na Meta — cada notificação usa só as variáveis extras que o seu
+  // template declara. "Tipo" entra em set/2026 pra reaproveitar os mesmos
   // templates entre consulta/retorno/exame (ver NotificationInput.typeLabel).
   const bodyParameters = [typeLabel, patientName, whenLabel, locationLabel];
   if (addressText !== null) bodyParameters.push(addressText);
   if (priceText !== null) bodyParameters.push(priceText);
+  if (linkText !== null) bodyParameters.push(linkText);
 
-  const bodyPreview = spec.buildPreview(typeLabel, patientName, whenLabel, locationLabel, addressText, priceText);
+  const bodyPreview = spec.buildPreview(typeLabel, patientName, whenLabel, locationLabel, addressText, priceText, linkText);
 
   let status: string;
   let waMessageId: string | null = null;
@@ -218,6 +230,20 @@ export function sendAppointmentCancellation(input: NotificationInput): Promise<s
     buildPreview: (type, name, when, location) =>
       `Atendimento cancelado: ${type} de ${name}, marcado para ${when}, no ${location}. ` +
       "Se quiser remarcar, é só responder por aqui.",
+  });
+}
+
+// Cancelamento em massa de um dia (Fase 12) — motivo fixo ("imprevisto da
+// médica"), já inclui o link de um `booking_links` novo (validade mais
+// longa que o padrão do bot) pra remarcar sem precisar escrever pro bot.
+export function sendMassCancellationNotice(input: NotificationInput): Promise<string> {
+  return sendNotification(input, {
+    messageType: "appointment_mass_cancellation",
+    templateName: import.meta.env.WHATSAPP_TEMPLATE_MASS_CANCELLATION,
+    includeLink: true,
+    buildPreview: (type, name, when, location, _address, _price, link) =>
+      `Atendimento cancelado (imprevisto da médica): ${type} de ${name}, marcado para ${when}, no ${location}. ` +
+      `Link para remarcar: ${link}`,
   });
 }
 

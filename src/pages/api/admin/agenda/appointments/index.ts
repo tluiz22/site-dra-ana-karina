@@ -146,6 +146,24 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     return back("1");
   }
 
+  // Invalida qualquer link de agendamento ainda pendente desse paciente pro
+  // mesmo tipo (ex.: de um cancelamento em massa, Fase 12) — evita que o
+  // responsável use um link antigo depois que a secretária já remarcou por
+  // aqui; sem isso, ele só seria barrado bem no fim do fluxo do link (mesma
+  // trava de duplicidade acima), depois de já ter escolhido data/horário.
+  let invalidateLinksQuery = supabase
+    .from("booking_links")
+    .update({ used_at: new Date().toISOString() })
+    .eq("patient_id", patientId)
+    .eq("mode", "create")
+    .is("used_at", null);
+
+  invalidateLinksQuery = isExam
+    ? invalidateLinksQuery.eq("appointment_type", "exam").eq("exam_type_id", examTypeId ?? "")
+    : invalidateLinksQuery.in("appointment_type", ["first_visit", "return_visit"]);
+
+  await invalidateLinksQuery;
+
   const guardian = (patient.guardians ?? null) as unknown as {
     id: string;
     full_name: string;
