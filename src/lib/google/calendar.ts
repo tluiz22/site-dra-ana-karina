@@ -84,7 +84,12 @@ export interface CalendarEvent {
   description?: string;
   start: { dateTime?: string };
   end: { dateTime?: string };
-  extendedProperties?: { private?: { appointment_id?: string } };
+  // `appointment_id`: evento normal, 1 agendamento = 1 evento.
+  // `group_exam_type_id`: evento de sessão de exame em grupo (Fase 11 etapa
+  // 4), compartilhado por vários agendamentos — não tem um único
+  // `appointment_id` pra apontar, de propósito (ver "Ver pacientes" nas
+  // telas de Agenda).
+  extendedProperties?: { private?: { appointment_id?: string; group_exam_type_id?: string } };
 }
 
 export async function listEvents(timeMin: Date, timeMax: Date): Promise<CalendarEvent[]> {
@@ -140,6 +145,41 @@ export async function createEvent({
   return { id: response.data.id };
 }
 
+// Sessão de exame em grupo (Fase 11 etapa 4): um único evento compartilhado
+// por todos os pacientes daquele horário, sem nome de paciente nenhum
+// (só a contagem de vagas ocupadas) — pedido do cliente. Criado só pelo
+// primeiro paciente da sessão; os seguintes reaproveitam o mesmo evento via
+// `updateEventDetails`.
+export async function createGroupSessionEvent({
+  summary,
+  description,
+  start,
+  end,
+  examTypeId,
+}: {
+  summary: string;
+  description: string;
+  start: string;
+  end: string;
+  examTypeId: string;
+}): Promise<{ id: string }> {
+  const client = getAuthClient();
+
+  const response = await client.request<{ id: string }>({
+    url: eventsUrl(),
+    method: "POST",
+    data: {
+      summary,
+      description,
+      start: { dateTime: start, timeZone: "America/Fortaleza" },
+      end: { dateTime: end, timeZone: "America/Fortaleza" },
+      extendedProperties: { private: { group_exam_type_id: examTypeId } },
+    },
+  });
+
+  return { id: response.data.id };
+}
+
 export async function cancelEvent(eventId: string): Promise<void> {
   const client = getAuthClient();
 
@@ -163,5 +203,20 @@ export async function rescheduleEvent(
       start: { dateTime: start, timeZone: "America/Fortaleza" },
       end: { dateTime: end, timeZone: "America/Fortaleza" },
     },
+  });
+}
+
+// Usado pelo exame em grupo (Fase 11 etapa 4) pra atualizar a contagem de
+// vagas ocupadas no evento compartilhado da sessão, sem mexer no horário.
+export async function updateEventDetails(
+  eventId: string,
+  { summary, description }: { summary: string; description: string }
+): Promise<void> {
+  const client = getAuthClient();
+
+  await client.request({
+    url: eventsUrl(`/${encodeURIComponent(eventId)}`),
+    method: "PATCH",
+    data: { summary, description },
   });
 }

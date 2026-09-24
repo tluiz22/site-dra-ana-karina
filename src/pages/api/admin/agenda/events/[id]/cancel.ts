@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { createClient } from "../../../../../../lib/supabase/server";
 import { cancelEvent } from "../../../../../../lib/google/calendar";
+import { leaveGroupSessionEvent } from "../../../../../../lib/scheduling/groupSessionCalendar";
 import { buildAppointmentTypeLabel, sendAppointmentCancellation } from "../../../../../../lib/whatsapp/notifications";
 
 export const POST: APIRoute = async ({ params, request, cookies }) => {
@@ -40,7 +41,7 @@ export const POST: APIRoute = async ({ params, request, cookies }) => {
     .eq("id", appointmentId)
     .neq("status", "canceled")
     .select(
-      "scheduled_at, appointment_type, patients ( full_name, guardians ( id, full_name, phone ) ), clinic_locations ( type ), exam_types ( name )"
+      "scheduled_at, appointment_type, exam_type_id, patients ( full_name, guardians ( id, full_name, phone ) ), clinic_locations ( type ), exam_types ( name, scheduling_mode )"
     )
     .maybeSingle();
 
@@ -50,7 +51,36 @@ export const POST: APIRoute = async ({ params, request, cookies }) => {
     });
   }
 
-  await cancelEvent(id);
+  const examTypeForCancel = (appointment.exam_types ?? null) as unknown as { name: string; scheduling_mode: string } | null;
+  const isGroupExam = appointment.appointment_type === "exam" && examTypeForCancel?.scheduling_mode === "group";
+
+  if (isGroupExam && appointment.exam_type_id) {
+    // Sessão de grupo: sai do evento compartilhado (atualiza a contagem) em
+    // vez de cancelar o evento de todo mundo — só cancela de verdade quando
+    // esse cancelamento deixa a sessão vazia.
+    const weekday = new Date(new Date(appointment.scheduled_at).getTime() - 3 * 60 * 60 * 1000).getUTCDay();
+    const time = new Date(new Date(appointment.scheduled_at).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(11, 16);
+    const { data: window } = await supabase
+      .from("exam_type_availability_windows")
+      .select("capacity")
+      .eq("exam_type_id", appointment.exam_type_id)
+      .eq("weekday", weekday)
+      .eq("start_time", `${time}:00`)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    await leaveGroupSessionEvent({
+      supabase,
+      appointmentIdLeaving: appointmentId,
+      examTypeId: appointment.exam_type_id,
+      examName: examTypeForCancel?.name ?? "Exame",
+      capacity: window?.capacity ?? 1,
+      startIso: appointment.scheduled_at,
+      googleEventId: id,
+    });
+  } else {
+    await cancelEvent(id);
+  }
 
   // Notificação de cancelamento por WhatsApp (Fase 3a) — melhor esforço.
   const patient = (appointment.patients ?? null) as unknown as {

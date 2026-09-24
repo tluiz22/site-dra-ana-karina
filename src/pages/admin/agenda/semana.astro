@@ -190,6 +190,7 @@ const today = todayFortaleza();
             <div class="mt-2 flex flex-col gap-1.5">
               {dayEvents.length ? (
                 dayEvents.map((event) => {
+                  const groupExamTypeId = event.extendedProperties?.private?.group_exam_type_id;
                   const appointmentId = event.extendedProperties?.private?.appointment_id;
                   const appointment = appointmentId ? appointmentsById.get(appointmentId) : undefined;
                   const isCancelled = event.status === "cancelled";
@@ -201,7 +202,7 @@ const today = todayFortaleza();
                       class={`block rounded-md border-l-4 bg-slate-50/60 py-1 pl-2 pr-1.5 text-xs hover:bg-slate-100 ${
                         isCancelled
                           ? "border-l-slate-300 text-slate-400 line-through"
-                          : `${accentBorderByVariant[typeBadgeVariant(appointment?.appointment_type)]} text-slate-700`
+                          : `${accentBorderByVariant[groupExamTypeId ? "warning" : typeBadgeVariant(appointment?.appointment_type)]} text-slate-700`
                       }`}
                     >
                       <span class="font-medium">{formatTime(event.start.dateTime)}</span>{" "}

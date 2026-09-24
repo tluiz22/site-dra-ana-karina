@@ -147,6 +147,7 @@ const sortedEvents = [...events].sort(
     {
       sortedEvents.length ? (
         sortedEvents.map((event) => {
+          const groupExamTypeId = event.extendedProperties?.private?.group_exam_type_id;
           const appointmentId = event.extendedProperties?.private?.appointment_id;
           const appointment = appointmentId ? appointmentsById.get(appointmentId) : undefined;
           const isCancelled = event.status === "cancelled";
@@ -163,7 +164,26 @@ const sortedEvents = [...events].sort(
                 </span>
                 {isCancelled && <Badge variant="neutral">Cancelado</Badge>}
               </div>
-              {appointment ? (
+              {groupExamTypeId ? (
+                // Sessão de exame em grupo (Fase 11 etapa 4): um evento só,
+                // compartilhado por vários pacientes — sem nome de paciente
+                // aqui de propósito (pedido do cliente). "Ver pacientes" leva
+                // pro Resumo do dia, que lista cada um individualmente.
+                <div class="mt-2 text-sm text-slate-700">
+                  <p class="font-medium text-slate-900">{event.summary}</p>
+                  <div class="mt-2">
+                    <Badge variant="warning">Exame em grupo</Badge>
+                  </div>
+                  {!isCancelled && (
+                    <a
+                      href={`/admin/consultas?tab=resumo&date=${date}`}
+                      class="mt-3 inline-block text-xs font-semibold text-sky-700 hover:underline"
+                    >
+                      Ver pacientes
+                    </a>
+                  )}
+                </div>
+              ) : appointment ? (
                 <div class="mt-2 text-sm text-slate-700">
                   <p class="font-medium text-slate-900">{patient?.full_name}</p>
                   <p class="mt-0.5 text-slate-500">

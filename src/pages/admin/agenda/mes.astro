@@ -85,9 +85,17 @@ for (const event of events) {
   const dateTime = event.start.dateTime;
   if (!dateTime) continue;
   const appointmentId = event.extendedProperties?.private?.appointment_id;
-  if (!appointmentId) continue;
+  const groupExamTypeId = event.extendedProperties?.private?.group_exam_type_id;
+  if (!appointmentId && !groupExamTypeId) continue;
   const entry = countsByDate.get(fortalezaDateStr(dateTime));
   if (!entry) continue;
+  if (groupExamTypeId) {
+    // Sessão de exame em grupo: um evento só representa a sessão inteira
+    // (não um agendamento) — conta como 1 "exame" nesse dia, sem tentar
+    // adivinhar quantos pacientes tem na turma a partir do texto do evento.
+    if (event.status !== "cancelled") entry.exames++;
+    continue;
+  }
   if (event.status === "cancelled") {
     entry.cancelled++;
     continue;
