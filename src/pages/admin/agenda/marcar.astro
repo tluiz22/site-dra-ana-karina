@@ -49,6 +49,13 @@ const locationCategory: LocationCategory =
 const appointmentType: AppointmentType =
   Astro.url.searchParams.get("appointment_type") === "return_visit" ? "return_visit" : "first_visit";
 
+// Pré-preenche o paciente quando chega de um link com destinatário já
+// identificado (ex.: botão "Remarcar" da aba "Aguardando remarcação",
+// Fase 12) — evita ter que buscar de novo alguém que já estava na tela
+// anterior.
+const prefillPatientId = Astro.url.searchParams.get("patient_id") ?? "";
+const prefillPatientLabel = Astro.url.searchParams.get("patient_label") ?? "";
+
 const errorMessages: Record<string, string> = {
   slot_taken: "Esse horário acabou de deixar de estar livre. Escolha outro.",
   patient_already_scheduled:
@@ -127,10 +134,11 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
           type="text"
           id="patient_search"
           autocomplete="off"
+          value={prefillPatientLabel}
           placeholder="Buscar pelo nome da criança ou telefone do responsável"
           class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
         />
-        <input type="hidden" id="patient_id" name="patient_id" required />
+        <input type="hidden" id="patient_id" name="patient_id" value={prefillPatientId} required />
         <div id="patient_results" class="mt-1 flex flex-col overflow-hidden rounded-lg border border-slate-200 empty:hidden empty:border-0"></div>
         <p id="patient_warning" class="mt-1 hidden text-xs text-amber-700"></p>
         <p class="mt-1 text-xs text-slate-500">
