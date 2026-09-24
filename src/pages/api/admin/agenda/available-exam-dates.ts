@@ -1,13 +1,12 @@
 import type { APIRoute } from "astro";
 import { createClient } from "../../../../lib/supabase/server";
-import { getExamAvailableSlotsForDate } from "../../../../lib/scheduling/getExamAvailableSlotsForDate";
+import { getExamNextAvailableDates } from "../../../../lib/scheduling/getExamNextAvailableDates";
 
 export const GET: APIRoute = async ({ url, request, cookies }) => {
   const examTypeId = url.searchParams.get("exam_type_id");
-  const date = url.searchParams.get("date");
 
-  if (!examTypeId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return new Response(JSON.stringify({ error: "exam_type_id e date (YYYY-MM-DD) são obrigatórios" }), {
+  if (!examTypeId) {
+    return new Response(JSON.stringify({ error: "exam_type_id é obrigatório" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
@@ -21,25 +20,15 @@ export const GET: APIRoute = async ({ url, request, cookies }) => {
   ]);
 
   if (!examLocation || !examType) {
-    return new Response(JSON.stringify({ slots: [] }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ dates: [] }), { headers: { "Content-Type": "application/json" } });
   }
 
-  const slots = await getExamAvailableSlotsForDate({
+  const dates = await getExamNextAvailableDates({
     supabase,
     examTypeId,
     examLocationId: examLocation.id,
-    date,
     examDurationMinutes: examType.duration_minutes,
   });
 
-  return new Response(
-    JSON.stringify({
-      slots: slots.map((slot) => ({
-        start: slot.start.toISOString(),
-        label: slot.label,
-        clinicLocationId: slot.clinicLocationId,
-      })),
-    }),
-    { headers: { "Content-Type": "application/json" } }
-  );
+  return new Response(JSON.stringify({ dates }), { headers: { "Content-Type": "application/json" } });
 };

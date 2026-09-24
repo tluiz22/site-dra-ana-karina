@@ -4,6 +4,9 @@ import Footer from "../../components/Footer.astro";
 import { createServiceClient } from "../../lib/supabase/service";
 import { getNextAvailableDates } from "../../lib/scheduling/getNextAvailableDates";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../lib/scheduling/getAvailableSlotsForDate";
+import { getNextAvailableGroupDates, type AvailableGroupSession } from "../../lib/scheduling/getNextAvailableGroupDates";
+import { getExamNextAvailableDates } from "../../lib/scheduling/getExamNextAvailableDates";
+import { getExamAvailableSlotsForDate } from "../../lib/scheduling/getExamAvailableSlotsForDate";
 import { resolveClinicLocationIds } from "../../lib/scheduling/resolveClinicLocationIds";
 import { formatPhoneBR } from "../../lib/phone";
 
@@ -14,11 +17,11 @@ const { data: link } = token
   ? await supabase
       .from("booking_links")
       .select(
-        `id, mode, appointment_type, clinic_location_id, location_category, expires_at, used_at,
+        `id, mode, appointment_type, clinic_location_id, location_category, expires_at, used_at, exam_type_id,
          guardians ( full_name, phone ),
          patients ( full_name, birthdate ),
          appointments ( scheduled_at, clinic_locations ( name, type, address ) ),
-         exam_types ( name, duration_minutes, preparation_instructions )`
+         exam_types ( name, duration_minutes, preparation_instructions, scheduling_mode )`
       )
       .eq("id", token)
       .maybeSingle()
@@ -49,7 +52,9 @@ const examType = (link?.exam_types ?? null) as unknown as {
   name: string;
   duration_minutes: number;
   preparation_instructions: string | null;
+  scheduling_mode: string;
 } | null;
+const isGroupExam = link?.appointment_type === "exam" && examType?.scheduling_mode === "group";
 
 function categoryLabel(type: string | undefined | null): string {
   return type === "home_visit" ? "Atendimento domiciliar" : type === "exam" ? "Exames" : "Consultório";
@@ -91,42 +96,89 @@ function formatDateTimeBR(iso: string): string {
   return `${datePart} às ${timePart}`;
 }
 
+function groupSessionStartIso(session: AvailableGroupSession): string {
+  return new Date(`${session.date}T${session.startTime}:00-03:00`).toISOString();
+}
+
 let availableDates: { date: string; weekday: number }[] = [];
 let initialSlots: { start: Date; label: string; clinicLocationId: string }[] = [];
+let groupDateOptions: AvailableGroupSession[] = [];
+let selectedGroupSession: AvailableGroupSession | undefined;
 let selectedDate = "";
 
 if (state === "form" && link) {
   const appointmentType = link.appointment_type as AppointmentType;
   const examDurationMinutes = examType?.duration_minutes;
 
-  // Exame: local único, já resolvido. Consulta/retorno: categoria mesclando
-  // todos os consultórios físicos ativos dela (ver "Backlog futuro" no plano).
-  const clinicLocationIds =
-    appointmentType === "exam"
-      ? link.clinic_location_id
-        ? [link.clinic_location_id]
-        : []
-      : await resolveClinicLocationIds(supabase, (link.location_category as "clinic" | "home_visit") ?? "clinic");
+  if (isGroupExam) {
+    // Exame em grupo: sem freebusy do Calendar, um único horário fixo por
+    // dia da semana — a "Data" já carrega o horário junto (ver script no
+    // fim da página), sem etapa separada de escolher horário.
+    const sessions = await getNextAvailableGroupDates({ supabase, examTypeId: link.exam_type_id ?? "" });
+    const seenDates = new Set<string>();
+    for (const session of sessions) {
+      if (seenDates.has(session.date)) continue;
+      seenDates.add(session.date);
+      groupDateOptions.push(session);
+    }
 
-  availableDates = await getNextAvailableDates({
-    supabase,
-    clinicLocationIds,
-    appointmentType,
-    examDurationMinutes,
-  });
+    const dateParam = Astro.url.searchParams.get("date");
+    selectedDate =
+      dateParam && groupDateOptions.some((d) => d.date === dateParam) ? dateParam : (groupDateOptions[0]?.date ?? "");
+    selectedGroupSession = groupDateOptions.find((d) => d.date === selectedDate);
+  } else if (appointmentType === "exam") {
+    // Exame individual: disponibilidade própria do exame (cada um tem a
+    // sua, não compartilha com nenhum local — ver Fase 11).
+    const examTypeId = link.exam_type_id ?? "";
+    const examLocationId = link.clinic_location_id ?? "";
 
-  const dateParam = Astro.url.searchParams.get("date");
-  selectedDate =
-    dateParam && availableDates.some((d) => d.date === dateParam) ? dateParam : (availableDates[0]?.date ?? "");
+    availableDates = examTypeId
+      ? await getExamNextAvailableDates({
+          supabase,
+          examTypeId,
+          examLocationId,
+          examDurationMinutes: examDurationMinutes ?? 0,
+        })
+      : [];
 
-  if (selectedDate) {
-    initialSlots = await getAvailableSlotsForDate({
+    const dateParam = Astro.url.searchParams.get("date");
+    selectedDate =
+      dateParam && availableDates.some((d) => d.date === dateParam) ? dateParam : (availableDates[0]?.date ?? "");
+
+    if (selectedDate && examTypeId) {
+      initialSlots = await getExamAvailableSlotsForDate({
+        supabase,
+        examTypeId,
+        examLocationId,
+        date: selectedDate,
+        examDurationMinutes: examDurationMinutes ?? 0,
+      });
+    }
+  } else {
+    // Consulta/retorno: categoria mesclando todos os consultórios físicos
+    // ativos dela (ver "Backlog futuro" no plano).
+    const clinicLocationIds = await resolveClinicLocationIds(supabase, (link.location_category as "clinic" | "home_visit") ?? "clinic");
+
+    availableDates = await getNextAvailableDates({
       supabase,
       clinicLocationIds,
-      date: selectedDate,
       appointmentType,
       examDurationMinutes,
     });
+
+    const dateParam = Astro.url.searchParams.get("date");
+    selectedDate =
+      dateParam && availableDates.some((d) => d.date === dateParam) ? dateParam : (availableDates[0]?.date ?? "");
+
+    if (selectedDate) {
+      initialSlots = await getAvailableSlotsForDate({
+        supabase,
+        clinicLocationIds,
+        date: selectedDate,
+        appointmentType,
+        examDurationMinutes,
+      });
+    }
   }
 }
 
@@ -258,7 +310,32 @@ const confirmedLocation = currentAppointment?.clinic_locations ?? null;
                 <label for="date" class="block text-sm font-medium text-slate-700">
                   {isExam ? "Data do exame" : "Data da consulta"}
                 </label>
-                {availableDates.length ? (
+                {isGroupExam ? (
+                  groupDateOptions.length ? (
+                    <select
+                      id="date"
+                      name="date"
+                      class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    >
+                      {groupDateOptions.map((session) => (
+                        <option
+                          value={session.date}
+                          selected={session.date === selectedDate}
+                          data-start={groupSessionStartIso(session)}
+                          data-start-label={session.startTime}
+                          data-end-label={session.endTime}
+                          data-remaining={session.remainingCapacity}
+                        >
+                          {formatWeekdayFull(session.date)}, {formatDateBR(session.date)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p class="mt-1 text-sm text-slate-500">
+                      Não encontramos vaga nos próximos dias. Fale com a secretária pelo WhatsApp.
+                    </p>
+                  )
+                ) : availableDates.length ? (
                   <select
                     id="date"
                     name="date"
@@ -278,32 +355,52 @@ const confirmedLocation = currentAppointment?.clinic_locations ?? null;
                 )}
               </div>
 
-              <div>
-                <span class="block text-sm font-medium text-slate-700">{isExam ? "Horário do exame" : "Horário da consulta"}</span>
-                <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
-                  {initialSlots.length ? (
-                    initialSlots.map((slot) => (
-                      <label class="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50">
-                        <input
-                          type="radio"
-                          name="start"
-                          value={`${slot.start.toISOString()}|${slot.clinicLocationId}`}
-                          required
-                          class="mr-1"
-                        />
-                        {slot.label}
-                      </label>
-                    ))
-                  ) : (
-                    <p class="text-sm text-slate-500">Nenhum horário livre nesse dia. Escolha outra data.</p>
-                  )}
+              {isGroupExam ? (
+                <div>
+                  <span class="block text-sm font-medium text-slate-700">Horário do exame</span>
+                  <p id="group_session_info" class="mt-1 text-sm text-slate-600">
+                    {selectedGroupSession && (
+                      <>
+                        Esse exame é sempre das {selectedGroupSession.startTime} às {selectedGroupSession.endTime} —
+                        escolha só a data. Vagas: {selectedGroupSession.remainingCapacity}.
+                      </>
+                    )}
+                  </p>
+                  <input
+                    type="hidden"
+                    id="group_start"
+                    name="start"
+                    value={selectedGroupSession ? `${groupSessionStartIso(selectedGroupSession)}|${link.clinic_location_id ?? ""}` : ""}
+                  />
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <span class="block text-sm font-medium text-slate-700">{isExam ? "Horário do exame" : "Horário da consulta"}</span>
+                  <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
+                    {initialSlots.length ? (
+                      initialSlots.map((slot) => (
+                        <label class="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50">
+                          <input
+                            type="radio"
+                            name="start"
+                            value={`${slot.start.toISOString()}|${slot.clinicLocationId}`}
+                            required
+                            class="mr-1"
+                          />
+                          {slot.label}
+                        </label>
+                      ))
+                    ) : (
+                      <p class="text-sm text-slate-500">Nenhum horário livre nesse dia. Escolha outra data.</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <button
                 id="submit_btn"
                 type="submit"
-                disabled={!availableDates.length}
+                disabled={isGroupExam ? !groupDateOptions.length : !availableDates.length}
                 class="w-fit rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isExam ? "Confirmar exame" : "Confirmar consulta"}
@@ -364,6 +461,32 @@ const confirmedLocation = currentAppointment?.clinic_locations ?? null;
         label.append(slot.label);
         slotsContainer.appendChild(label);
       });
+    });
+  }
+</script>
+<script>
+  // Exame em grupo: cada <option> de data já carrega o horário fixo e as
+  // vagas (dataset), então trocar a data não precisa de fetch nenhum — só
+  // atualizar o texto informativo e o campo escondido "start".
+  const groupDateSelect = document.getElementById("date") as HTMLSelectElement | null;
+  const groupSessionInfo = document.getElementById("group_session_info") as HTMLParagraphElement | null;
+  const groupStartInput = document.getElementById("group_start") as HTMLInputElement | null;
+
+  if (groupDateSelect && groupSessionInfo && groupStartInput) {
+    const clinicLocationId = groupStartInput.value.split("|")[1] ?? "";
+
+    groupDateSelect.addEventListener("change", () => {
+      const option = groupDateSelect.selectedOptions[0];
+      const start = option?.dataset.start;
+      const startLabel = option?.dataset.startLabel;
+      const endLabel = option?.dataset.endLabel;
+      const remaining = option?.dataset.remaining;
+
+      if (!start) return;
+
+      groupStartInput.value = `${start}|${clinicLocationId}`;
+      groupSessionInfo.textContent =
+        `Esse exame é sempre das ${startLabel} às ${endLabel} — escolha só a data. Vagas: ${remaining}.`;
     });
   }
 </script>

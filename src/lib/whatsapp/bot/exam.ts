@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendInteractiveListMessage, sendTextMessage } from "../client";
 import { resolveByListOrDigit, sendAndLog, updateConversationState, type Selection } from "./shared";
 import { enterPatientSelect, type BookingContext } from "./booking";
+import { filterExamTypesWithSchedule } from "../../scheduling/examScheduleAvailability";
 import * as texts from "./messages";
 
 export const EXAM_STATES: ReadonlySet<string> = new Set(["EXAM_TYPE_SELECT"]);
@@ -24,19 +25,23 @@ interface ExamContext {
   exam_type_candidates?: ExamTypeCandidate[];
 }
 
-// MENU opção "Marcar exame" → lista os exam_types ativos.
+// MENU opção "Marcar exame" → lista os exam_types ativos com disponibilidade
+// cadastrada (regra geral da Fase 11: sem dia/horário cadastrado, o exame
+// nem aparece pra escolher).
 export async function startExam(
   supabase: SupabaseClient,
   guardianPhone: string,
   guardianId: string | null
 ): Promise<void> {
-  const { data: examTypes } = await supabase
+  const { data: allExamTypes } = await supabase
     .from("exam_types")
-    .select("id, name")
+    .select("id, name, scheduling_mode")
     .eq("is_active", true)
     .order("name");
 
-  if (!examTypes?.length) {
+  const examTypes = await filterExamTypesWithSchedule(supabase, allExamTypes ?? []);
+
+  if (!examTypes.length) {
     const body = texts.noExamTypesAvailableText();
     await sendAndLog(supabase, guardianId, "bot_exam_no_types", body, () =>
       sendTextMessage({ to: guardianPhone, body })

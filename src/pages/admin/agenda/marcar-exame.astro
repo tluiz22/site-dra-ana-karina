@@ -3,7 +3,11 @@ import AdminLayout from "../../../layouts/AdminLayout.astro";
 import Card from "../../../components/admin/Card.astro";
 import Icon from "../../../components/admin/Icon.astro";
 import { createClient } from "../../../lib/supabase/server";
-import { getAvailableSlotsForDate } from "../../../lib/scheduling/getAvailableSlotsForDate";
+import { getExamAvailableSlotsForDate } from "../../../lib/scheduling/getExamAvailableSlotsForDate";
+import { getExamNextAvailableDates } from "../../../lib/scheduling/getExamNextAvailableDates";
+import { getNextAvailableGroupDates, type AvailableGroupSession } from "../../../lib/scheduling/getNextAvailableGroupDates";
+import { filterExamTypesWithSchedule } from "../../../lib/scheduling/examScheduleAvailability";
+import { formatDateOptionLabel } from "../../../lib/dates";
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
@@ -16,33 +20,26 @@ const { data: examLocation } = await supabase
   .eq("is_active", true)
   .maybeSingle();
 
-const { data: examTypes } = await supabase
+const { data: allExamTypes } = await supabase
   .from("exam_types")
-  .select("id, name, duration_minutes")
+  .select("id, name, duration_minutes, scheduling_mode")
   .eq("is_active", true)
   .order("name");
 
-const { data: availabilityWindows } = examLocation
-  ? await supabase
-      .from("availability_windows")
-      .select("weekday")
-      .eq("clinic_location_id", examLocation.id)
-      .eq("is_active", true)
-  : { data: [] };
-
-const availableWeekdaysForExam = [...new Set((availabilityWindows ?? []).map((w) => w.weekday))];
+const examTypes = await filterExamTypesWithSchedule(supabase, allExamTypes ?? []);
 
 function todayFortaleza(): string {
   return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-const dateParam = Astro.url.searchParams.get("date");
-const isValidDateParam = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) && dateParam >= todayFortaleza();
-const date = isValidDateParam ? dateParam : todayFortaleza();
+function groupSessionStartIso(session: AvailableGroupSession): string {
+  return new Date(`${session.date}T${session.startTime}:00-03:00`).toISOString();
+}
 
 const examTypeIdParam = Astro.url.searchParams.get("exam_type_id");
 const examTypeId = examTypes?.some((e) => e.id === examTypeIdParam) ? examTypeIdParam : (examTypes?.[0]?.id ?? "");
 const selectedExamType = examTypes?.find((e) => e.id === examTypeId) ?? null;
+const isGroupExam = selectedExamType?.scheduling_mode === "group";
 
 // Pré-preenche o paciente quando chega de um link com destinatário já
 // identificado (ex.: botão "Remarcar" da aba "Aguardando remarcação",
@@ -60,21 +57,50 @@ const errorMessages: Record<string, string> = {
 const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
 
-const slots =
-  examLocation && selectedExamType
-    ? await getAvailableSlotsForDate({
-        supabase,
-        clinicLocationIds: [examLocation.id],
-        date,
-        appointmentType: "exam",
-        examDurationMinutes: selectedExamType.duration_minutes,
-      })
-    : [];
+let availableDates: { date: string; weekday: number }[] = [];
+let slots: { start: Date; label: string; clinicLocationId: string }[] = [];
+let groupDateOptions: AvailableGroupSession[] = [];
+let selectedGroupSession: AvailableGroupSession | undefined;
+let date = "";
+
+if (selectedExamType && isGroupExam) {
+  const sessions = await getNextAvailableGroupDates({ supabase, examTypeId: selectedExamType.id });
+  const seenDates = new Set<string>();
+  for (const session of sessions) {
+    if (seenDates.has(session.date)) continue;
+    seenDates.add(session.date);
+    groupDateOptions.push(session);
+  }
+
+  const dateParam = Astro.url.searchParams.get("date");
+  date = dateParam && groupDateOptions.some((d) => d.date === dateParam) ? dateParam : (groupDateOptions[0]?.date ?? "");
+  selectedGroupSession = groupDateOptions.find((d) => d.date === date);
+} else if (selectedExamType && examLocation) {
+  availableDates = await getExamNextAvailableDates({
+    supabase,
+    examTypeId: selectedExamType.id,
+    examLocationId: examLocation.id,
+    examDurationMinutes: selectedExamType.duration_minutes,
+  });
+
+  const dateParam = Astro.url.searchParams.get("date");
+  date = dateParam && availableDates.some((d) => d.date === dateParam) ? dateParam : (availableDates[0]?.date ?? "");
+
+  if (date) {
+    slots = await getExamAvailableSlotsForDate({
+      supabase,
+      examTypeId: selectedExamType.id,
+      examLocationId: examLocation.id,
+      date,
+      examDurationMinutes: selectedExamType.duration_minutes,
+    });
+  }
+}
 ---
 
 <AdminLayout title="Marcar exame">
   <a
-    href={`/admin/agenda?date=${date}`}
+    href={`/admin/agenda?date=${date || todayFortaleza()}`}
     class="inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:underline"
   >
     <Icon name="chevron-left" class="h-4 w-4" />
@@ -86,11 +112,15 @@ const slots =
   {
     !examTypes?.length && (
       <p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-        Nenhum tipo de exame cadastrado ainda —{" "}
+        Nenhum tipo de exame disponível pra marcar — cadastre um em{" "}
         <a href="/admin/configuracoes/exames" class="underline">
-          cadastre um em Configurações
+          Configurações {"› "}Exames
         </a>{" "}
-        antes de marcar.
+        e uma disponibilidade em{" "}
+        <a href="/admin/configuracoes" class="underline">
+          Configurações {"› "}Disponibilidade
+        </a>
+        .
       </p>
     )
   }
@@ -107,46 +137,91 @@ const slots =
 
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label for="exam_type_id" class="block text-sm font-medium text-slate-700">Tipo de exame</label>
+          <label for="exam_type_id" class="block text-sm font-medium text-slate-700">Tipo de exame *</label>
           <select
             id="exam_type_id"
             name="exam_type_id"
+            required
             class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
           >
             {
               examTypes?.map((exam) => (
-                <option value={exam.id} selected={exam.id === examTypeId}>{exam.name}</option>
+                <option value={exam.id} selected={exam.id === examTypeId} data-scheduling-mode={exam.scheduling_mode}>
+                  {exam.name}{exam.scheduling_mode === "group" ? " (em grupo)" : ""}
+                </option>
               ))
             }
           </select>
         </div>
         <div>
-          <label for="date" class="block text-sm font-medium text-slate-700">Data</label>
-          <input
-            type="date"
-            id="date"
-            name="date"
-            value={date}
-            min={todayFortaleza()}
-            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
-          />
-          <p id="date_availability_warning" class="mt-1 hidden text-xs text-amber-700"></p>
+          <label for="date" class="block text-sm font-medium text-slate-700">Data *</label>
+          {
+            isGroupExam ? (
+              <select
+                id="date"
+                name="date"
+                required
+                disabled={!groupDateOptions.length}
+                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600 disabled:bg-slate-100"
+              >
+                {groupDateOptions.map((session) => (
+                  <option
+                    value={session.date}
+                    selected={session.date === date}
+                    data-start={groupSessionStartIso(session)}
+                    data-start-label={session.startTime}
+                    data-end-label={session.endTime}
+                    data-remaining={session.remainingCapacity}
+                  >
+                    {formatDateOptionLabel(session.date)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                id="date"
+                name="date"
+                required
+                disabled={!availableDates.length}
+                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600 disabled:bg-slate-100"
+              >
+                {availableDates.map((d) => (
+                  <option value={d.date} selected={d.date === date}>{formatDateOptionLabel(d.date)}</option>
+                ))}
+              </select>
+            )
+          }
+          <p
+            id="date_availability_warning"
+            class={`mt-1 text-xs text-amber-700 ${(isGroupExam ? groupDateOptions.length : availableDates.length) ? "hidden" : ""}`}
+          >
+            {isGroupExam ? "Nenhuma vaga nos próximos dias." : "Nenhum horário livre para esse exame nos próximos dias."} Fale com a
+            secretária pelo WhatsApp.
+          </p>
         </div>
       </div>
 
       <div>
-        <label for="patient_search" class="block text-sm font-medium text-slate-700">Paciente</label>
+        <label for="patient_search" class="block text-sm font-medium text-slate-700">Paciente *</label>
         <input
           type="text"
           id="patient_search"
           autocomplete="off"
           value={prefillPatientLabel}
           placeholder="Buscar pelo nome da criança ou telefone do responsável"
+          data-search-category="exame"
+          data-already-scheduled-list-suffix="já tem esse tipo de exame marcado"
+          data-already-scheduled-message="Este paciente já tem um exame futuro marcado."
           class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
         />
-        <input type="hidden" id="patient_id" name="patient_id" value={prefillPatientId} required />
+        <input type="hidden" id="patient_id" name="patient_id" value={prefillPatientId} />
+        <div class="mt-1 flex items-center justify-between gap-2">
+          <p id="patient_warning" class="hidden text-xs text-amber-700"></p>
+          <button type="button" id="patient_clear" class="hidden shrink-0 text-xs font-medium text-sky-700 hover:underline">
+            Trocar paciente
+          </button>
+        </div>
         <div id="patient_results" class="mt-1 flex flex-col overflow-hidden rounded-lg border border-slate-200 empty:hidden empty:border-0"></div>
-        <p id="patient_warning" class="mt-1 hidden text-xs text-amber-700"></p>
         <p class="mt-1 text-xs text-slate-500">
           Não encontrou?{" "}
           <a href="/admin/pacientes" target="_blank" class="text-sky-700 hover:underline">
@@ -157,10 +232,26 @@ const slots =
       </div>
 
       <div>
-        <span class="block text-sm font-medium text-slate-700">Horário</span>
-        <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
+        <span class="block text-sm font-medium text-slate-700">Horário *</span>
+        <div id="slots_container" class="mt-1 flex flex-wrap gap-2" data-exam-location-id={examLocation?.id ?? ""}>
           {
-            slots.length ? (
+            isGroupExam ? (
+              selectedGroupSession ? (
+                <>
+                  <p class="text-sm text-slate-600">
+                    Esse exame é sempre das {selectedGroupSession.startTime} às {selectedGroupSession.endTime} —
+                    escolha só a data. Vagas: {selectedGroupSession.remainingCapacity}.
+                  </p>
+                  <input
+                    type="hidden"
+                    name="start"
+                    value={`${groupSessionStartIso(selectedGroupSession)}|${examLocation?.id ?? ""}`}
+                  />
+                </>
+              ) : (
+                <p class="text-sm text-slate-500">Nenhuma vaga nesse dia. Escolha outra data.</p>
+              )
+            ) : slots.length ? (
               slots.map((slot) => (
                 <label class="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50 has-[:checked]:text-sky-700">
                   <input
@@ -184,7 +275,7 @@ const slots =
 
       <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
         <a
-          href={`/admin/agenda?date=${date}`}
+          href={`/admin/agenda?date=${date || todayFortaleza()}`}
           class="w-full rounded-md border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:w-fit"
         >
           Cancelar
@@ -192,7 +283,7 @@ const slots =
         <button
           id="submit_btn"
           type="submit"
-          disabled={!examTypes?.length}
+          disabled={!examTypes?.length || (isGroupExam ? !groupDateOptions.length : !availableDates.length)}
           class="w-full rounded-md bg-sky-700 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-fit"
         >
           Confirmar agendamento
@@ -202,138 +293,5 @@ const slots =
   </Card>
 </AdminLayout>
 
-<script define:vars={{ availableWeekdaysForExam }} is:inline>
-  window.__availableWeekdaysForExam = availableWeekdaysForExam;
-</script>
-
-<script>
-  const examTypeSelect = document.getElementById("exam_type_id") as HTMLSelectElement;
-  const dateInput = document.getElementById("date") as HTMLInputElement;
-  const slotsContainer = document.getElementById("slots_container") as HTMLDivElement;
-  const dateWarning = document.getElementById("date_availability_warning") as HTMLParagraphElement;
-  const submitBtn = document.getElementById("submit_btn") as HTMLButtonElement;
-  const availableWeekdaysForExam = (window as any).__availableWeekdaysForExam as number[];
-
-  function weekdayInFortaleza(dateStr: string): number {
-    return new Date(`${dateStr}T00:00:00-03:00`).getUTCDay();
-  }
-
-  function isExamAvailableOnDate(): boolean {
-    if (!dateInput.value) return true;
-    return availableWeekdaysForExam.includes(weekdayInFortaleza(dateInput.value));
-  }
-
-  function showDateUnavailableWarning() {
-    dateWarning.textContent = "Não há atendimento de exames nesse dia da semana. Escolha outra data.";
-    dateWarning.classList.remove("hidden");
-    submitBtn.disabled = true;
-    slotsContainer.innerHTML = "";
-  }
-
-  async function refreshSlots() {
-    if (!examTypeSelect.value || !dateInput.value) return;
-
-    if (!isExamAvailableOnDate()) {
-      showDateUnavailableWarning();
-      return;
-    }
-
-    dateWarning.classList.add("hidden");
-    submitBtn.disabled = false;
-
-    slotsContainer.innerHTML = '<p class="text-sm text-slate-500">Carregando horários…</p>';
-
-    const params = new URLSearchParams({
-      exam_type_id: examTypeSelect.value,
-      date: dateInput.value,
-    });
-
-    const response = await fetch(`/api/admin/agenda/available-exam-slots?${params.toString()}`);
-    const { slots } = await response.json();
-    slotsContainer.innerHTML = "";
-
-    if (!slots.length) {
-      slotsContainer.innerHTML =
-        '<p class="text-sm text-slate-500">Nenhum horário livre para essa data/exame. Tente outra data.</p>';
-      return;
-    }
-
-    slots.forEach((slot: { start: string; label: string; clinicLocationId: string }) => {
-      const label = document.createElement("label");
-      label.className =
-        "cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 shadow-sm has-[:checked]:border-sky-700 has-[:checked]:bg-sky-50 has-[:checked]:text-sky-700";
-      const input = document.createElement("input");
-      input.type = "radio";
-      input.name = "start";
-      input.value = `${slot.start}|${slot.clinicLocationId}`;
-      input.required = true;
-      input.className = "mr-1";
-      label.appendChild(input);
-      label.append(slot.label);
-      slotsContainer.appendChild(label);
-    });
-  }
-
-  if (!isExamAvailableOnDate()) showDateUnavailableWarning();
-
-  examTypeSelect.addEventListener("change", refreshSlots);
-  dateInput.addEventListener("change", refreshSlots);
-</script>
-
-<script>
-  import { formatPhoneBR } from "../../../lib/phone";
-
-  const searchInput = document.getElementById("patient_search") as HTMLInputElement;
-  const hiddenInput = document.getElementById("patient_id") as HTMLInputElement;
-  const resultsBox = document.getElementById("patient_results") as HTMLDivElement;
-  const warningBox = document.getElementById("patient_warning") as HTMLParagraphElement;
-  let debounceTimer: ReturnType<typeof setTimeout>;
-
-  searchInput.addEventListener("input", () => {
-    hiddenInput.value = "";
-    warningBox.classList.add("hidden");
-    clearTimeout(debounceTimer);
-    const q = searchInput.value.trim();
-
-    if (q.length < 2) {
-      resultsBox.innerHTML = "";
-      return;
-    }
-
-    debounceTimer = setTimeout(async () => {
-      const response = await fetch(`/api/admin/pacientes/search?q=${encodeURIComponent(q)}&category=exame`);
-      const patients = await response.json();
-      resultsBox.innerHTML = "";
-
-      patients.forEach(
-        (patient: {
-          id: string;
-          full_name: string;
-          guardian_name: string;
-          guardian_phone: string;
-          has_upcoming_appointment: boolean;
-        }) => {
-          const item = document.createElement("button");
-          item.type = "button";
-          item.className =
-            "block w-full border-t border-slate-100 px-3 py-2 text-left text-sm first:border-t-0 hover:bg-slate-100";
-          const label = `${patient.full_name} — resp. ${patient.guardian_name} (${formatPhoneBR(patient.guardian_phone)})`;
-          item.textContent = patient.has_upcoming_appointment ? `${label} ⚠ já tem esse tipo de exame marcado` : label;
-          item.addEventListener("click", () => {
-            hiddenInput.value = patient.id;
-            searchInput.value = label;
-            resultsBox.innerHTML = "";
-            if (patient.has_upcoming_appointment) {
-              warningBox.textContent =
-                "Este paciente já tem um exame futuro marcado — se for o mesmo tipo, confirmar aqui vai ser bloqueado até esse ser cancelado/remarcado.";
-              warningBox.classList.remove("hidden");
-            } else {
-              warningBox.classList.add("hidden");
-            }
-          });
-          resultsBox.appendChild(item);
-        }
-      );
-    }, 300);
-  });
-</script>
+<script src="../../../scripts/examSlotPicker.ts"></script>
+<script src="../../../scripts/patientSearch.ts"></script>

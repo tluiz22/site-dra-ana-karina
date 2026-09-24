@@ -2,6 +2,9 @@ import type { APIRoute } from "astro";
 import { createClient } from "../../../../../lib/supabase/server";
 import { createEvent } from "../../../../../lib/google/calendar";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../../../lib/scheduling/getAvailableSlotsForDate";
+import { getExamAvailableSlotsForDate } from "../../../../../lib/scheduling/getExamAvailableSlotsForDate";
+import { getNextAvailableGroupDates, type AvailableGroupSession } from "../../../../../lib/scheduling/getNextAvailableGroupDates";
+import { joinOrCreateGroupSessionEvent } from "../../../../../lib/scheduling/groupSessionCalendar";
 import { resolveClinicLocationIds, type LocationCategory } from "../../../../../lib/scheduling/resolveClinicLocationIds";
 import { buildAppointmentTypeLabel, sendAppointmentConfirmation } from "../../../../../lib/whatsapp/notifications";
 
@@ -38,50 +41,77 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
 
   const supabase = createClient(request, cookies);
 
-  let clinicLocationIds: string[];
-  let examDurationMinutes: number | undefined;
+  const { data: settings } = await supabase.from("appointment_settings").select("*").eq("id", 1).single();
+  if (!settings) {
+    return back("1");
+  }
+
+  let examTypeInfo: { name: string; duration_minutes: number; price_cents: number; scheduling_mode: string } | null = null;
+  let clinicLocationId: string;
+  let startDate: Date;
+  let endDate: Date;
+  let durationMinutes: number;
+  let matchedSession: AvailableGroupSession | undefined;
+
   if (isExam) {
-    const { data: examType } = await supabase
+    const { data: fetchedExamType } = await supabase
       .from("exam_types")
-      .select("duration_minutes")
+      .select("name, duration_minutes, price_cents, scheduling_mode")
       .eq("id", examTypeId)
       .maybeSingle();
-    if (!examType) return back("1");
-    examDurationMinutes = examType.duration_minutes;
+    if (!fetchedExamType) return back("1");
+    examTypeInfo = fetchedExamType;
+
     const { data: examLocation } = await supabase
       .from("clinic_locations")
       .select("id")
       .eq("type", "exam")
       .eq("is_active", true)
       .maybeSingle();
-    clinicLocationIds = examLocation ? [examLocation.id] : [];
+    if (!examLocation) return back("1");
+
+    if (examTypeInfo.scheduling_mode === "group") {
+      // Sem freebusy do Calendar: revalida a sessão (data+horário fixo)
+      // contra a capacidade recalculada agora. A trava de verdade contra
+      // duas confirmações simultâneas é a RPC atômica logo abaixo — essa
+      // aqui é só uma primeira checagem, mais barata.
+      const sessions = await getNextAvailableGroupDates({ supabase, examTypeId: examTypeId! });
+      matchedSession = sessions.find(
+        (session) => new Date(`${session.date}T${session.startTime}:00-03:00`).toISOString() === startIso
+      );
+      if (!matchedSession) return back("slot_taken");
+      clinicLocationId = examLocation.id;
+      durationMinutes = examTypeInfo.duration_minutes;
+      startDate = new Date(`${matchedSession.date}T${matchedSession.startTime}:00-03:00`);
+      endDate = new Date(`${matchedSession.date}T${matchedSession.endTime}:00-03:00`);
+    } else {
+      const slots = await getExamAvailableSlotsForDate({
+        supabase,
+        examTypeId: examTypeId!,
+        examLocationId: examLocation.id,
+        date,
+        examDurationMinutes: examTypeInfo.duration_minutes,
+      });
+      const matchedSlot = slots.find((slot) => slot.start.toISOString() === startIso);
+      if (!matchedSlot) return back("slot_taken");
+      clinicLocationId = matchedSlot.clinicLocationId;
+      durationMinutes = examTypeInfo.duration_minutes ?? settings.default_appointment_duration_minutes;
+      startDate = matchedSlot.start;
+      endDate = new Date(startDate.getTime() + durationMinutes * 60_000);
+    }
   } else {
-    clinicLocationIds = await resolveClinicLocationIds(supabase, locationCategory);
+    const clinicLocationIds = await resolveClinicLocationIds(supabase, locationCategory);
+    const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType });
+    const matchedSlot = slots.find((slot) => slot.start.toISOString() === startIso);
+    if (!matchedSlot) return back("slot_taken");
+    clinicLocationId = matchedSlot.clinicLocationId;
+    durationMinutes =
+      appointmentType === "return_visit"
+        ? settings.default_return_visit_duration_minutes
+        : settings.default_appointment_duration_minutes;
+    startDate = matchedSlot.start;
+    endDate = new Date(startDate.getTime() + durationMinutes * 60_000);
   }
-
-  const [{ data: settings }, slots] = await Promise.all([
-    supabase.from("appointment_settings").select("*").eq("id", 1).single(),
-    getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType, examDurationMinutes }),
-  ]);
-
-  if (!settings) {
-    return back("1");
-  }
-
-  const matchedSlot = slots.find((slot) => slot.start.toISOString() === startIso);
-  if (!matchedSlot) {
-    return back("slot_taken");
-  }
-  const clinicLocationId = matchedSlot.clinicLocationId;
-
-  const durationMinutes = isExam
-    ? (examDurationMinutes ?? settings.default_appointment_duration_minutes)
-    : appointmentType === "return_visit"
-      ? settings.default_return_visit_duration_minutes
-      : settings.default_appointment_duration_minutes;
-
-  const startDate = matchedSlot.start;
-  const endDate = new Date(startDate.getTime() + durationMinutes * 60_000);
 
   const { data: patient } = await supabase
     .from("patients")
@@ -120,30 +150,70 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     .eq("id", clinicLocationId)
     .single();
 
-  const { data: examType } = isExam
-    ? await supabase.from("exam_types").select("name, price_cents").eq("id", examTypeId).maybeSingle()
-    : { data: null };
-
-  const typeLabel = buildAppointmentTypeLabel(appointmentType, examType?.name);
+  const typeLabel = buildAppointmentTypeLabel(appointmentType, examTypeInfo?.name);
   const locationLabel = location?.type === "clinic" ? "Consultório" : location?.type === "exam" ? "Exames" : "Domiciliar";
 
-  const { data: newAppointment, error: insertError } = await supabase
-    .from("appointments")
-    .insert({
-      patient_id: patientId,
-      clinic_location_id: clinicLocationId,
-      scheduled_at: startDate.toISOString(),
-      duration_minutes: durationMinutes,
-      appointment_type: appointmentType,
-      exam_type_id: isExam ? examTypeId : null,
-      status: "scheduled",
-      booking_channel: "admin",
-    })
-    .select("id")
-    .single();
+  let newAppointmentId: string;
 
-  if (insertError || !newAppointment) {
-    return back("1");
+  if (isExam && examTypeInfo?.scheduling_mode === "group" && matchedSession) {
+    const { data: rpcAppointmentId, error: rpcError } = await supabase.rpc("book_group_exam_session", {
+      p_exam_type_id: examTypeId,
+      p_scheduled_at: startDate.toISOString(),
+      p_patient_id: patientId,
+      p_clinic_location_id: clinicLocationId,
+      p_duration_minutes: durationMinutes,
+      p_booking_channel: "admin",
+    });
+
+    if (rpcError || !rpcAppointmentId) {
+      return back("slot_taken");
+    }
+
+    newAppointmentId = rpcAppointmentId as string;
+
+    const eventId = await joinOrCreateGroupSessionEvent({
+      supabase,
+      appointmentId: newAppointmentId,
+      examTypeId: examTypeId!,
+      examName: examTypeInfo.name,
+      capacity: matchedSession.capacity,
+      startIso: startDate.toISOString(),
+      endIso: endDate.toISOString(),
+    });
+
+    await supabase.from("appointments").update({ google_event_id: eventId }).eq("id", newAppointmentId);
+  } else {
+    const { data: newAppointment, error: insertError } = await supabase
+      .from("appointments")
+      .insert({
+        patient_id: patientId,
+        clinic_location_id: clinicLocationId,
+        scheduled_at: startDate.toISOString(),
+        duration_minutes: durationMinutes,
+        appointment_type: appointmentType,
+        exam_type_id: isExam ? examTypeId : null,
+        status: "scheduled",
+        booking_channel: "admin",
+      })
+      .select("id")
+      .single();
+
+    if (insertError || !newAppointment) {
+      return back("1");
+    }
+
+    newAppointmentId = newAppointment.id;
+
+    const guardianForEvent = (patient.guardians ?? null) as unknown as { full_name: string; phone: string } | null;
+    const event = await createEvent({
+      summary: `${typeLabel} — ${patient.full_name}${guardianForEvent ? ` (resp. ${guardianForEvent.full_name})` : ""}`,
+      description: `Tel: ${guardianForEvent?.phone ?? "—"} | Tipo: ${typeLabel} | Local: ${locationLabel}`,
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
+      appointmentId: newAppointment.id,
+    });
+
+    await supabase.from("appointments").update({ google_event_id: event.id }).eq("id", newAppointment.id);
   }
 
   // Invalida qualquer link de agendamento ainda pendente desse paciente pro
@@ -170,22 +240,12 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     phone: string;
   } | null;
 
-  const event = await createEvent({
-    summary: `${typeLabel} — ${patient.full_name}${guardian ? ` (resp. ${guardian.full_name})` : ""}`,
-    description: `Tel: ${guardian?.phone ?? "—"} | Tipo: ${typeLabel} | Local: ${locationLabel}`,
-    start: startDate.toISOString(),
-    end: endDate.toISOString(),
-    appointmentId: newAppointment.id,
-  });
-
-  await supabase.from("appointments").update({ google_event_id: event.id }).eq("id", newAppointment.id);
-
   // Confirmação por WhatsApp (Fase 3a) — melhor esforço: uma falha aqui não
   // pode invalidar a consulta já criada no Supabase e no Calendar.
   if (guardian?.phone) {
     await sendAppointmentConfirmation({
       supabase,
-      appointmentId: newAppointment.id,
+      appointmentId: newAppointmentId,
       guardianId: guardian.id,
       guardianPhone: guardian.phone,
       patientName: patient.full_name,
@@ -197,7 +257,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
       // anterior (decisão do cliente); exame tem valor próprio em
       // exam_types.price_cents; `null` aciona o texto de "incluso" na
       // notificação.
-      priceCents: isExam ? examType?.price_cents : appointmentType === "return_visit" ? null : location?.price_first_visit_cents,
+      priceCents: isExam ? examTypeInfo?.price_cents : appointmentType === "return_visit" ? null : location?.price_first_visit_cents,
     });
   }
 
