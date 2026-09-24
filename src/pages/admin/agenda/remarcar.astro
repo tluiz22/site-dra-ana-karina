@@ -4,8 +4,10 @@ import Card from "../../../components/admin/Card.astro";
 import Icon from "../../../components/admin/Icon.astro";
 import { createClient } from "../../../lib/supabase/server";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../lib/scheduling/getAvailableSlotsForDate";
+import { getNextAvailableDates } from "../../../lib/scheduling/getNextAvailableDates";
 import { resolveClinicLocationIds, type LocationCategory } from "../../../lib/scheduling/resolveClinicLocationIds";
 import { formatPhoneBR } from "../../../lib/phone";
+import { formatDateOptionLabel } from "../../../lib/dates";
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
@@ -42,23 +44,7 @@ if (locationRows?.some((l) => l.type === "home_visit")) {
   categoryOptions.push({ value: "home_visit", label: "Atendimento domiciliar" });
 }
 
-const { data: availabilityWindows } = await supabase
-  .from("availability_windows")
-  .select("clinic_location_id, weekday")
-  .eq("is_active", true);
-
 const categoryByLocationId = new Map((locationRows ?? []).map((l) => [l.id, l.type as LocationCategory]));
-const availableWeekdaysByCategory: Record<string, number[]> = {};
-for (const window of availabilityWindows ?? []) {
-  const category = categoryByLocationId.get(window.clinic_location_id as string);
-  if (!category) continue;
-  const weekdays = (availableWeekdaysByCategory[category] ??= []);
-  if (!weekdays.includes(window.weekday)) weekdays.push(window.weekday);
-}
-
-function todayFortaleza(): string {
-  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
 
 function toFortalezaDateStr(iso: string): string {
   return new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -70,10 +56,6 @@ function toFortalezaTimeStr(iso: string): string {
 
 const currentDateStr = toFortalezaDateStr(appointment.scheduled_at);
 const currentTimeStr = toFortalezaTimeStr(appointment.scheduled_at);
-
-const dateParam = Astro.url.searchParams.get("date");
-const isValidDateParam = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) && dateParam >= todayFortaleza();
-const date = isValidDateParam ? dateParam : currentDateStr >= todayFortaleza() ? currentDateStr : todayFortaleza();
 
 const locationCategoryParam = Astro.url.searchParams.get("location_category");
 const locationCategory: LocationCategory =
@@ -97,7 +79,16 @@ const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
 
 const clinicLocationIds = await resolveClinicLocationIds(supabase, locationCategory);
-const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType });
+const availableDates = await getNextAvailableDates({ supabase, clinicLocationIds, appointmentType });
+
+const dateParam = Astro.url.searchParams.get("date");
+const date = dateParam && availableDates.some((d) => d.date === dateParam)
+  ? dateParam
+  : availableDates.some((d) => d.date === currentDateStr)
+    ? currentDateStr
+    : (availableDates[0]?.date ?? "");
+
+const slots = date ? await getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType }) : [];
 ---
 
 <AdminLayout title="Remarcar consulta">
@@ -150,15 +141,24 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
         </div>
         <div>
           <label for="date" class="block text-sm font-medium text-slate-700">Data</label>
-          <input
-            type="date"
+          <select
             id="date"
             name="date"
-            value={date}
-            min={todayFortaleza()}
-            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
-          />
-          <p id="date_availability_warning" class="mt-1 hidden text-xs text-amber-700"></p>
+            disabled={!availableDates.length}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600 disabled:bg-slate-100"
+          >
+            {
+              availableDates.map((d) => (
+                <option value={d.date} selected={d.date === date}>{formatDateOptionLabel(d.date)}</option>
+              ))
+            }
+          </select>
+          <p
+            id="date_availability_warning"
+            class={`mt-1 text-xs text-amber-700 ${availableDates.length ? "hidden" : ""}`}
+          >
+            Não encontramos horários livres nos próximos dias. Fale com a secretária pelo WhatsApp.
+          </p>
         </div>
         <div>
           <label for="appointment_type" class="block text-sm font-medium text-slate-700">Tipo</label>
@@ -209,6 +209,7 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
         <button
           id="submit_btn"
           type="submit"
+          disabled={!availableDates.length}
           class="w-full rounded-md bg-sky-700 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-fit"
         >
           Confirmar remarcação
@@ -218,7 +219,4 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
   </Card>
 </AdminLayout>
 
-<script define:vars={{ availableWeekdaysByCategory }} is:inline>
-  window.__availableWeekdaysByLocation = availableWeekdaysByCategory;
-</script>
 <script src="../../../scripts/appointmentSlotPicker.ts"></script>

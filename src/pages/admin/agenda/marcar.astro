@@ -4,7 +4,9 @@ import Card from "../../../components/admin/Card.astro";
 import Icon from "../../../components/admin/Icon.astro";
 import { createClient } from "../../../lib/supabase/server";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../../lib/scheduling/getAvailableSlotsForDate";
+import { getNextAvailableDates } from "../../../lib/scheduling/getNextAvailableDates";
 import { resolveClinicLocationIds, type LocationCategory } from "../../../lib/scheduling/resolveClinicLocationIds";
+import { formatDateOptionLabel } from "../../../lib/dates";
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
@@ -20,27 +22,9 @@ if (locationRows?.some((l) => l.type === "home_visit")) {
   categoryOptions.push({ value: "home_visit", label: "Atendimento domiciliar" });
 }
 
-const { data: availabilityWindows } = await supabase
-  .from("availability_windows")
-  .select("clinic_location_id, weekday")
-  .eq("is_active", true);
-
-const categoryByLocationId = new Map((locationRows ?? []).map((l) => [l.id, l.type as LocationCategory]));
-const availableWeekdaysByCategory: Record<string, number[]> = {};
-for (const window of availabilityWindows ?? []) {
-  const category = categoryByLocationId.get(window.clinic_location_id as string);
-  if (!category) continue;
-  const weekdays = (availableWeekdaysByCategory[category] ??= []);
-  if (!weekdays.includes(window.weekday)) weekdays.push(window.weekday);
-}
-
 function todayFortaleza(): string {
   return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
-
-const dateParam = Astro.url.searchParams.get("date");
-const isValidDateParam = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) && dateParam >= todayFortaleza();
-const date = isValidDateParam ? dateParam : todayFortaleza();
 
 const locationCategoryParam = Astro.url.searchParams.get("location_category");
 const locationCategory: LocationCategory =
@@ -66,12 +50,17 @@ const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
 
 const clinicLocationIds = await resolveClinicLocationIds(supabase, locationCategory);
-const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType });
+const availableDates = await getNextAvailableDates({ supabase, clinicLocationIds, appointmentType });
+
+const dateParam = Astro.url.searchParams.get("date");
+const date = dateParam && availableDates.some((d) => d.date === dateParam) ? dateParam : (availableDates[0]?.date ?? "");
+
+const slots = date ? await getAvailableSlotsForDate({ supabase, clinicLocationIds, date, appointmentType }) : [];
 ---
 
 <AdminLayout title="Marcar consulta">
   <a
-    href={`/admin/agenda?date=${date}`}
+    href={`/admin/agenda?date=${date || todayFortaleza()}`}
     class="inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:underline"
   >
     <Icon name="chevron-left" class="h-4 w-4" />
@@ -90,10 +79,11 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
     <form method="POST" action="/api/admin/agenda/appointments" class="flex flex-col gap-6">
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
-          <label for="location_category" class="block text-sm font-medium text-slate-700">Local</label>
+          <label for="location_category" class="block text-sm font-medium text-slate-700">Local *</label>
           <select
             id="location_category"
             name="location_category"
+            required
             class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
           >
             {
@@ -104,22 +94,33 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
           </select>
         </div>
         <div>
-          <label for="date" class="block text-sm font-medium text-slate-700">Data</label>
-          <input
-            type="date"
+          <label for="date" class="block text-sm font-medium text-slate-700">Data *</label>
+          <select
             id="date"
             name="date"
-            value={date}
-            min={todayFortaleza()}
-            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
-          />
-          <p id="date_availability_warning" class="mt-1 hidden text-xs text-amber-700"></p>
+            required
+            disabled={!availableDates.length}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600 disabled:bg-slate-100"
+          >
+            {
+              availableDates.map((d) => (
+                <option value={d.date} selected={d.date === date}>{formatDateOptionLabel(d.date)}</option>
+              ))
+            }
+          </select>
+          <p
+            id="date_availability_warning"
+            class={`mt-1 text-xs text-amber-700 ${availableDates.length ? "hidden" : ""}`}
+          >
+            Não encontramos horários livres nos próximos dias. Fale com a secretária pelo WhatsApp.
+          </p>
         </div>
         <div>
-          <label for="appointment_type" class="block text-sm font-medium text-slate-700">Tipo</label>
+          <label for="appointment_type" class="block text-sm font-medium text-slate-700">Tipo *</label>
           <select
             id="appointment_type"
             name="appointment_type"
+            required
             class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
           >
             <option value="first_visit" selected={appointmentType === "first_visit"}>Consulta</option>
@@ -129,7 +130,7 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
       </div>
 
       <div>
-        <label for="patient_search" class="block text-sm font-medium text-slate-700">Paciente</label>
+        <label for="patient_search" class="block text-sm font-medium text-slate-700">Paciente *</label>
         <input
           type="text"
           id="patient_search"
@@ -138,9 +139,14 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
           placeholder="Buscar pelo nome da criança ou telefone do responsável"
           class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
         />
-        <input type="hidden" id="patient_id" name="patient_id" value={prefillPatientId} required />
+        <input type="hidden" id="patient_id" name="patient_id" value={prefillPatientId} />
+        <div class="mt-1 flex items-center justify-between gap-2">
+          <p id="patient_warning" class="hidden text-xs text-amber-700"></p>
+          <button type="button" id="patient_clear" class="hidden shrink-0 text-xs font-medium text-sky-700 hover:underline">
+            Trocar paciente
+          </button>
+        </div>
         <div id="patient_results" class="mt-1 flex flex-col overflow-hidden rounded-lg border border-slate-200 empty:hidden empty:border-0"></div>
-        <p id="patient_warning" class="mt-1 hidden text-xs text-amber-700"></p>
         <p class="mt-1 text-xs text-slate-500">
           Não encontrou?{" "}
           <a href="/admin/pacientes" target="_blank" class="text-sky-700 hover:underline">
@@ -151,7 +157,7 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
       </div>
 
       <div>
-        <span class="block text-sm font-medium text-slate-700">Horário</span>
+        <span class="block text-sm font-medium text-slate-700">Horário *</span>
         <div id="slots_container" class="mt-1 flex flex-wrap gap-2">
           {
             slots.length ? (
@@ -178,7 +184,7 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
 
       <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
         <a
-          href={`/admin/agenda?date=${date}`}
+          href={`/admin/agenda?date=${date || todayFortaleza()}`}
           class="w-full rounded-md border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:w-fit"
         >
           Cancelar
@@ -186,6 +192,7 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
         <button
           id="submit_btn"
           type="submit"
+          disabled={!availableDates.length}
           class="w-full rounded-md bg-sky-700 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-fit"
         >
           Confirmar agendamento
@@ -195,66 +202,5 @@ const slots = await getAvailableSlotsForDate({ supabase, clinicLocationIds, date
   </Card>
 </AdminLayout>
 
-<script define:vars={{ availableWeekdaysByCategory }} is:inline>
-  window.__availableWeekdaysByLocation = availableWeekdaysByCategory;
-</script>
-
-<script>
-  import { formatPhoneBR } from "../../../lib/phone";
-
-  const searchInput = document.getElementById("patient_search") as HTMLInputElement;
-  const hiddenInput = document.getElementById("patient_id") as HTMLInputElement;
-  const resultsBox = document.getElementById("patient_results") as HTMLDivElement;
-  const warningBox = document.getElementById("patient_warning") as HTMLParagraphElement;
-  let debounceTimer: ReturnType<typeof setTimeout>;
-
-  searchInput.addEventListener("input", () => {
-    hiddenInput.value = "";
-    warningBox.classList.add("hidden");
-    clearTimeout(debounceTimer);
-    const q = searchInput.value.trim();
-
-    if (q.length < 2) {
-      resultsBox.innerHTML = "";
-      return;
-    }
-
-    debounceTimer = setTimeout(async () => {
-      const response = await fetch(`/api/admin/pacientes/search?q=${encodeURIComponent(q)}`);
-      const patients = await response.json();
-      resultsBox.innerHTML = "";
-
-      patients.forEach(
-        (patient: {
-          id: string;
-          full_name: string;
-          guardian_name: string;
-          guardian_phone: string;
-          has_upcoming_appointment: boolean;
-        }) => {
-          const item = document.createElement("button");
-          item.type = "button";
-          item.className =
-            "block w-full border-t border-slate-100 px-3 py-2 text-left text-sm first:border-t-0 hover:bg-slate-100";
-          const label = `${patient.full_name} — resp. ${patient.guardian_name} (${formatPhoneBR(patient.guardian_phone)})`;
-          item.textContent = patient.has_upcoming_appointment ? `${label} ⚠ já tem consulta futura` : label;
-          item.addEventListener("click", () => {
-            hiddenInput.value = patient.id;
-            searchInput.value = label;
-            resultsBox.innerHTML = "";
-            if (patient.has_upcoming_appointment) {
-              warningBox.textContent =
-                "Este paciente já tem uma consulta futura marcada — confirmar aqui vai ser bloqueado até essa ser cancelada/remarcada.";
-              warningBox.classList.remove("hidden");
-            } else {
-              warningBox.classList.add("hidden");
-            }
-          });
-          resultsBox.appendChild(item);
-        }
-      );
-    }, 300);
-  });
-
-</script>
+<script src="../../../scripts/patientSearch.ts"></script>
 <script src="../../../scripts/appointmentSlotPicker.ts"></script>
