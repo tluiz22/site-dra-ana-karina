@@ -8,6 +8,8 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   const durationMinutes = Number(formData.get("duration_minutes"));
   const price = formData.get("price")?.toString();
   const preparationInstructions = formData.get("preparation_instructions")?.toString().trim() || null;
+  const schedulingModeRaw = formData.get("scheduling_mode")?.toString();
+  const schedulingMode = schedulingModeRaw === "group" ? "group" : "individual";
 
   const priceCents = price ? Math.round(Number(price) * 100) : NaN;
 
@@ -27,6 +29,7 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
       duration_minutes: durationMinutes,
       price_cents: priceCents,
       preparation_instructions: preparationInstructions,
+      scheduling_mode: schedulingMode,
     })
     .eq("id", id);
 

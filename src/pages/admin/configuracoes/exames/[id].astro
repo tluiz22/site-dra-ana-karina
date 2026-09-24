@@ -9,7 +9,7 @@ const { id } = Astro.params;
 
 const { data: exam } = await supabase
   .from("exam_types")
-  .select("id, name, duration_minutes, price_cents, preparation_instructions")
+  .select("id, name, duration_minutes, price_cents, preparation_instructions, scheduling_mode")
   .eq("id", id)
   .maybeSingle();
 
@@ -90,6 +90,30 @@ const errorMessage = errorParam ? "Não foi possível salvar. Confira os dados e
           placeholder="ex.: jejum de 8 horas"
           class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
         />
+      </div>
+      <div>
+        <label for="scheduling_mode" class="block text-sm font-medium text-slate-700">Modo de agendamento</label>
+        <select
+          id="scheduling_mode"
+          name="scheduling_mode"
+          class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+        >
+          <option value="individual" selected={exam.scheduling_mode === "individual"}>
+            Individual — cada paciente escolhe um horário só seu
+          </option>
+          <option value="group" selected={exam.scheduling_mode === "group"}>
+            Em grupo/turma — horário fixo por dia da semana, com limite de vagas
+          </option>
+        </select>
+        <p class="mt-1 text-xs text-slate-500">
+          Ex.: Prick Test para aeroalérgenos, feito no mesmo horário pra várias crianças. Escolhendo
+          "Em grupo/turma" e salvando, os dias/horários fixos desse exame passam a ser cadastrados em
+          Configurações {"› "}
+          <a href="/admin/configuracoes" class="text-sky-700 hover:underline">
+            Disponibilidade
+          </a>
+          .
+        </p>
       </div>
       <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
         <a
