@@ -241,6 +241,12 @@ export function handoffText(): string {
   );
 }
 
+// Usado enquanto SECRETARIA_HANDOFF_DISABLED (router.ts) está true, durante
+// os testes do sistema — ver comentário ao lado da flag.
+export function handoffDisabledText(): string {
+  return "Em testes, opção temporariamente desabilitada 🙏 Escolha outra opção no menu abaixo.";
+}
+
 // --- case 1 · Agendar -------------------------------------------------
 
 export interface LocationOption {

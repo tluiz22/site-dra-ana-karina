@@ -32,6 +32,12 @@ import { RESCHEDULE_STATES, handleRescheduleState, startReschedule } from "./res
 import { EXAM_STATES, handleExamState, startExam } from "./exam";
 import * as texts from "./messages";
 
+// "Falar com a secretária" temporariamente desligado enquanto o sistema
+// ainda está em teste (pedido do cliente, set/2026) — evita transferir de
+// verdade pra secretária antes de ir ao ar. Reverter pra false (ou remover)
+// quando sair de testes.
+const SECRETARIA_HANDOFF_DISABLED = true;
+
 interface ConversationStateRow {
   state: string;
   guardian_id: string | null;
@@ -261,6 +267,15 @@ async function handleMenu(
   }
 
   if (matchesOption(selection, "4", texts.MENU_LIST_ID.secretaria)) {
+    if (SECRETARIA_HANDOFF_DISABLED) {
+      const body = texts.handoffDisabledText();
+      await sendAndLog(supabase, guardianId, "bot_handoff_disabled", body, () =>
+        sendTextMessage({ to: guardianPhone, body })
+      );
+      await sendMenu(supabase, guardianPhone, guardianId);
+      return;
+    }
+
     const body = texts.handoffText();
     await sendAndLog(supabase, guardianId, "bot_handoff", body, () =>
       sendTextMessage({ to: guardianPhone, body })
