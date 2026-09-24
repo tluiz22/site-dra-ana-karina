@@ -5,6 +5,7 @@ import Badge from "../../../../components/admin/Badge.astro";
 import Icon from "../../../../components/admin/Icon.astro";
 import ConfirmDeleteDialog from "../../../../components/admin/ConfirmDeleteDialog.astro";
 import { createClient } from "../../../../lib/supabase/server";
+import { formatPhoneBR } from "../../../../lib/phone";
 
 const PAGE_SIZE = 20;
 
@@ -28,6 +29,12 @@ const errorMessages: Record<string, string> = {
 };
 const errorParam = Astro.url.searchParams.get("error");
 const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
+
+const duplicateParam = Astro.url.searchParams.get("duplicate") === "1";
+const pendingFullName = Astro.url.searchParams.get("full_name") ?? "";
+const pendingBirthdate = Astro.url.searchParams.get("birthdate") ?? "";
+const pendingNotes = Astro.url.searchParams.get("notes") ?? "";
+const existingNames = Astro.url.searchParams.get("existing") ?? "";
 
 const q = Astro.url.searchParams.get("q")?.trim() ?? "";
 const showInactive = Astro.url.searchParams.get("show_inactive") === "1";
@@ -87,7 +94,7 @@ function formatBirthdate(birthdate: string): string {
           </Badge>
         )}
       </h1>
-      <p class="mt-1 text-slate-600">{guardian.phone}</p>
+      <p class="mt-1 text-slate-600">{formatPhoneBR(guardian.phone)}</p>
     </div>
     <div class="flex gap-2">
       <a
@@ -124,6 +131,37 @@ function formatBirthdate(birthdate: string): string {
   <section class="mt-10">
     <h2 class="text-lg font-semibold text-slate-900">Adicionar criança</h2>
 
+    {
+      duplicateParam ? (
+        <Card class="mt-4 max-w-xl border-amber-200 bg-amber-50">
+          <p class="text-sm text-amber-900">
+            Já existe criança cadastrada com essa data de nascimento para este responsável: <strong>{existingNames}</strong>.
+          </p>
+          <p class="mt-2 text-sm text-amber-900">
+            Tem certeza que quer cadastrar <strong>{pendingFullName}</strong> como uma criança nova? Se for a mesma criança, cancele e use a que já está cadastrada.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <a
+              href={`/admin/pacientes/${guardian.id}`}
+              class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Cancelar
+            </a>
+            <form method="POST" action={`/api/admin/pacientes/${guardian.id}/criancas`}>
+              <input type="hidden" name="full_name" value={pendingFullName} />
+              <input type="hidden" name="birthdate" value={pendingBirthdate} />
+              <input type="hidden" name="notes" value={pendingNotes} />
+              <input type="hidden" name="confirm_duplicate" value="1" />
+              <button
+                type="submit"
+                class="rounded-md bg-sky-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-800"
+              >
+                Cadastrar mesmo assim
+              </button>
+            </form>
+          </div>
+        </Card>
+      ) : (
     <Card class="mt-4 max-w-xl">
       <form method="POST" action={`/api/admin/pacientes/${guardian.id}/criancas`} class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
@@ -170,6 +208,8 @@ function formatBirthdate(birthdate: string): string {
         </button>
       </form>
     </Card>
+      )
+    }
   </section>
 
   <section class="mt-10">

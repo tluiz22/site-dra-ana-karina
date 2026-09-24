@@ -13,6 +13,7 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   const fullName = formData.get("full_name")?.toString().trim();
   const birthdate = formData.get("birthdate")?.toString();
   const notes = formData.get("notes")?.toString().trim() || null;
+  const confirmDuplicate = formData.get("confirm_duplicate")?.toString() === "1";
 
   if (!guardianId || !fullName || !birthdate) {
     return redirect(`/admin/pacientes/${guardianId}?error=1`);
@@ -23,6 +24,27 @@ export const POST: APIRoute = async ({ params, request, cookies, redirect }) => 
   }
 
   const supabase = createClient(request, cookies);
+
+  if (!confirmDuplicate) {
+    const { data: matches } = await supabase
+      .from("patients")
+      .select("full_name")
+      .eq("guardian_id", guardianId)
+      .eq("is_active", true)
+      .eq("birthdate", birthdate);
+
+    if (matches && matches.length > 0) {
+      const duplicateParams = new URLSearchParams({
+        duplicate: "1",
+        full_name: fullName,
+        birthdate,
+        existing: matches.map((match) => match.full_name).join(", "),
+      });
+      if (notes) duplicateParams.set("notes", notes);
+      return redirect(`/admin/pacientes/${guardianId}?${duplicateParams.toString()}`);
+    }
+  }
+
   const { error } = await supabase.from("patients").insert({
     guardian_id: guardianId,
     full_name: fullName,
