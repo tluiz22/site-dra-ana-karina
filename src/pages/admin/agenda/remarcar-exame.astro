@@ -4,6 +4,7 @@ import Card from "../../../components/admin/Card.astro";
 import Icon from "../../../components/admin/Icon.astro";
 import { createClient } from "../../../lib/supabase/server";
 import { getAvailableSlotsForDate } from "../../../lib/scheduling/getAvailableSlotsForDate";
+import { formatPhoneBR } from "../../../lib/phone";
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
@@ -103,7 +104,7 @@ const slots =
   <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
     <p class="font-medium text-slate-900">{patient?.full_name}</p>
     <p class="text-slate-500">
-      Resp.: {guardian?.full_name} · {guardian?.phone}
+      Resp.: {guardian?.full_name} · {guardian?.phone && formatPhoneBR(guardian.phone)}
     </p>
     <p class="mt-1 text-slate-500">{examType?.name}</p>
     <p class="mt-1 text-slate-500">

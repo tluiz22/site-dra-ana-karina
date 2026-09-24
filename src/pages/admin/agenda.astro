@@ -6,6 +6,7 @@ import type { BadgeVariant } from "../../components/admin/Badge.astro";
 import Icon from "../../components/admin/Icon.astro";
 import { createClient } from "../../lib/supabase/server";
 import { listEvents } from "../../lib/google/calendar";
+import { formatPhoneBR } from "../../lib/phone";
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
@@ -166,7 +167,15 @@ const sortedEvents = [...events].sort(
                 <div class="mt-2 text-sm text-slate-700">
                   <p class="font-medium text-slate-900">{patient?.full_name}</p>
                   <p class="mt-0.5 text-slate-500">
-                    Resp.: {guardian?.full_name} · {guardian?.phone}
+                    Resp.: {guardian?.full_name}
+                    {guardian?.phone && (
+                      <>
+                        {" · "}
+                        <a href={`tel:${guardian.phone}`} class="text-sky-700 hover:underline">
+                          {formatPhoneBR(guardian.phone)}
+                        </a>
+                      </>
+                    )}
                   </p>
                   <div class="mt-2">
                     <Badge variant={typeBadgeVariant(appointment.appointment_type)}>

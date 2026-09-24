@@ -273,6 +273,8 @@ const slots =
 </script>
 
 <script>
+  import { formatPhoneBR } from "../../../lib/phone";
+
   const searchInput = document.getElementById("patient_search") as HTMLInputElement;
   const hiddenInput = document.getElementById("patient_id") as HTMLInputElement;
   const resultsBox = document.getElementById("patient_results") as HTMLDivElement;
@@ -307,7 +309,7 @@ const slots =
           item.type = "button";
           item.className =
             "block w-full border-t border-slate-100 px-3 py-2 text-left text-sm first:border-t-0 hover:bg-slate-100";
-          const label = `${patient.full_name} — resp. ${patient.guardian_name} (${patient.guardian_phone})`;
+          const label = `${patient.full_name} — resp. ${patient.guardian_name} (${formatPhoneBR(patient.guardian_phone)})`;
           item.textContent = patient.has_upcoming_appointment ? `${label} ⚠ já tem esse tipo de exame marcado` : label;
           item.addEventListener("click", () => {
             hiddenInput.value = patient.id;

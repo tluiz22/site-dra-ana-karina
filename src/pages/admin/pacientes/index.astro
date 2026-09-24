@@ -4,6 +4,7 @@ import Card from "../../../components/admin/Card.astro";
 import Badge from "../../../components/admin/Badge.astro";
 import ConfirmDeleteDialog from "../../../components/admin/ConfirmDeleteDialog.astro";
 import { createClient } from "../../../lib/supabase/server";
+import { formatPhoneBR } from "../../../lib/phone";
 
 const PAGE_SIZE = 20;
 
@@ -228,7 +229,7 @@ function pageUrl(targetPage: number): string {
                       </Badge>
                     )}
                   </td>
-                  <td class="px-3 py-2 text-slate-500">{guardian.phone}</td>
+                  <td class="px-3 py-2 text-slate-500">{formatPhoneBR(guardian.phone)}</td>
                   <td class="px-3 py-2">{(guardian.patients as any)?.[0]?.count ?? 0}</td>
                   <td class="whitespace-nowrap px-3 py-2 text-right">
                     <div class="flex flex-nowrap justify-end gap-1.5">

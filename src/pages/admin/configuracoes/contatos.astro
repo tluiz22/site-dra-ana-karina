@@ -5,6 +5,7 @@ import Card from "../../../components/admin/Card.astro";
 import Badge from "../../../components/admin/Badge.astro";
 import ConfirmDeleteDialog from "../../../components/admin/ConfirmDeleteDialog.astro";
 import { createClient } from "../../../lib/supabase/server";
+import { formatPhoneBR } from "../../../lib/phone";
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
@@ -55,7 +56,7 @@ const errorMessage = errorParam ? "Não foi possível salvar. Confira os dados e
               recipients.map((recipient) => (
                 <tr class="border-t border-slate-200">
                   <td class="px-3 py-2">{recipient.label}</td>
-                  <td class="px-3 py-2">{recipient.phone}</td>
+                  <td class="px-3 py-2">{formatPhoneBR(recipient.phone)}</td>
                   <td class="px-3 py-2">{recipient.receives_consultas ? "Sim" : "Não"}</td>
                   <td class="px-3 py-2">{recipient.receives_exames ? "Sim" : "Não"}</td>
                   <td class="px-3 py-2">

@@ -5,6 +5,7 @@ import { createServiceClient } from "../../lib/supabase/service";
 import { getNextAvailableDates } from "../../lib/scheduling/getNextAvailableDates";
 import { getAvailableSlotsForDate, type AppointmentType } from "../../lib/scheduling/getAvailableSlotsForDate";
 import { resolveClinicLocationIds } from "../../lib/scheduling/resolveClinicLocationIds";
+import { formatPhoneBR } from "../../lib/phone";
 
 const { token } = Astro.params;
 const supabase = createServiceClient();
@@ -236,7 +237,7 @@ const confirmedLocation = currentAppointment?.clinic_locations ?? null;
             <div class="mt-6 rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-700">
               <p class="font-medium text-slate-900">Responsável</p>
               <p>
-                {guardian?.full_name} · {guardian?.phone}
+                {guardian?.full_name} · {guardian?.phone && formatPhoneBR(guardian.phone)}
               </p>
             </div>
 
