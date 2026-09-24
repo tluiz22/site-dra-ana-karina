@@ -7,17 +7,25 @@ import { createClient } from "../../../lib/supabase/server";
 
 const supabase = createClient(Astro.request, Astro.cookies);
 
+// O local "Exames" fica fora daqui — cada exame tem sua própria
+// disponibilidade agora (ver "Exame" abaixo), não compartilha mais com um
+// local genérico (decisão revista, Fase 11); configurar horário nesse local
+// não teria mais efeito nenhum.
 const { data: clinicLocations } = await supabase
   .from("clinic_locations")
   .select("id, name")
   .eq("is_active", true)
+  .neq("type", "exam")
   .order("type");
 
-const { data: availabilityWindows } = await supabase
-  .from("availability_windows")
-  .select("id, weekday, start_time, end_time, clinic_locations ( name )")
-  .order("weekday")
-  .order("start_time");
+// Todo exame cadastrado entra na lista (não só os em modo "grupo") — o
+// cliente quer poder marcar disponibilidade própria pra qualquer exame; só
+// o campo "Vagas" fica restrito a exame em modo grupo (ver script no fim).
+const { data: examTypes } = await supabase
+  .from("exam_types")
+  .select("id, name, scheduling_mode")
+  .eq("is_active", true)
+  .order("name");
 
 const weekdayLabels = [
   "Domingo",
@@ -29,13 +37,78 @@ const weekdayLabels = [
   "Sábado",
 ];
 
+// Um único filtro "Local/Exame" cobre os dois domínios — o valor vem
+// prefixado ("location:<id>" ou "exam:<id>") pra saber qual tabela filtrar.
+const filterParam = Astro.url.searchParams.get("filter") ?? "";
+const [filterKind, filterId] = filterParam.includes(":") ? filterParam.split(":") : ["", ""];
+const weekdayParam = Astro.url.searchParams.get("weekday") ?? "";
+const weekdayFilter = weekdayParam !== "" ? Number(weekdayParam) : null;
+const hasActiveFilter = filterParam !== "" || weekdayParam !== "";
+
+let locationWindowsQuery = supabase
+  .from("availability_windows")
+  .select("id, weekday, start_time, end_time, clinic_location_id, clinic_locations ( name )")
+  .order("weekday")
+  .order("start_time");
+if (filterKind === "location") locationWindowsQuery = locationWindowsQuery.eq("clinic_location_id", filterId);
+if (weekdayFilter !== null) locationWindowsQuery = locationWindowsQuery.eq("weekday", weekdayFilter);
+const { data: locationWindows } = await locationWindowsQuery;
+
+let examWindowsQuery = supabase
+  .from("exam_type_availability_windows")
+  .select("id, weekday, start_time, end_time, capacity, exam_type_id, exam_types ( name )")
+  .eq("is_active", true)
+  .order("weekday")
+  .order("start_time");
+if (filterKind === "exam") examWindowsQuery = examWindowsQuery.eq("exam_type_id", filterId);
+if (weekdayFilter !== null) examWindowsQuery = examWindowsQuery.eq("weekday", weekdayFilter);
+const { data: examWindows } = await examWindowsQuery;
+
+// Local e exame guardam a disponibilidade em tabelas diferentes por trás
+// (decisão combinada com o cliente — não mexer em `availability_windows`,
+// usada todo dia pelo agendamento de consulta/retorno), mas aparecem juntos
+// numa lista só na tela.
+interface Row {
+  id: string;
+  kind: "location" | "exam";
+  label: string;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  capacity: number | null;
+  deleteAction: string;
+}
+
+const rows: Row[] = [
+  ...(locationWindows ?? []).map((w) => ({
+    id: w.id,
+    kind: "location" as const,
+    label: (w.clinic_locations as any)?.name ?? "—",
+    weekday: w.weekday,
+    startTime: w.start_time,
+    endTime: w.end_time,
+    capacity: null,
+    deleteAction: `/api/admin/configuracoes/availability-windows/${w.id}`,
+  })),
+  ...(examWindows ?? []).map((w) => ({
+    id: w.id,
+    kind: "exam" as const,
+    label: (w.exam_types as any)?.name ?? "—",
+    weekday: w.weekday,
+    startTime: w.start_time,
+    endTime: w.end_time,
+    capacity: w.capacity,
+    deleteAction: `/api/admin/configuracoes/exam-type-availability-windows/${w.id}`,
+  })),
+].sort((a, b) => a.weekday - b.weekday || a.startTime.localeCompare(b.startTime));
+
 const errorMessages: Record<string, string> = {
   overlap: "Esse horário se sobrepõe a um intervalo já cadastrado para esse dia.",
   invalid_range: "O horário de início precisa ser antes do horário de fim.",
   "1": "Não foi possível salvar. Confira os dados e tente novamente.",
 };
 const errorParam = Astro.url.searchParams.get("error");
-const errorMessage = errorParam ? errorMessages[errorParam] ?? errorMessages["1"] : null;
+const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
 ---
 
 <AdminLayout title="Configurações">
@@ -51,37 +124,102 @@ const errorMessage = errorParam ? errorMessages[errorParam] ?? errorMessages["1"
   }
 
   <section class="mt-6">
-    <h2 class="text-lg font-semibold text-slate-900">Disponibilidade</h2>
-    <p class="mt-1 text-sm text-slate-600">
-      Dias e horários em que a agenda pode oferecer consulta, por local de atendimento.
-    </p>
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">Disponibilidade</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Dias e horários em que a agenda pode oferecer consulta ou exame, por local de atendimento
+          ou por tipo de exame.
+        </p>
+      </div>
+
+      <form method="GET" action="/admin/configuracoes" class="flex flex-wrap items-end gap-2">
+        <div>
+          <label for="filter" class="block text-xs font-medium text-slate-600">Local/Exame</label>
+          <select
+            id="filter"
+            name="filter"
+            onchange="this.form.submit()"
+            class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          >
+            <option value="">Todos</option>
+            <optgroup label="Local">
+              {
+                clinicLocations?.map((location) => (
+                  <option value={`location:${location.id}`} selected={filterParam === `location:${location.id}`}>
+                    {location.name}
+                  </option>
+                ))
+              }
+            </optgroup>
+            <optgroup label="Exame">
+              {
+                examTypes?.map((exam) => (
+                  <option value={`exam:${exam.id}`} selected={filterParam === `exam:${exam.id}`}>
+                    {exam.name}
+                  </option>
+                ))
+              }
+            </optgroup>
+          </select>
+        </div>
+        <div>
+          <label for="weekday_filter" class="block text-xs font-medium text-slate-600">Dia da semana</label>
+          <select
+            id="weekday_filter"
+            name="weekday"
+            onchange="this.form.submit()"
+            class="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          >
+            <option value="">Todos os dias</option>
+            {
+              weekdayLabels.map((label, index) => (
+                <option value={index} selected={weekdayFilter === index}>{label}</option>
+              ))
+            }
+          </select>
+        </div>
+        {
+          hasActiveFilter && (
+            <a href="/admin/configuracoes" class="pb-2 text-xs font-medium text-slate-500 hover:underline">
+              Limpar filtros
+            </a>
+          )
+        }
+      </form>
+    </div>
 
     <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-      <table class="w-full min-w-[520px] border-collapse text-left text-sm">
+      <table class="w-full min-w-[600px] border-collapse text-left text-sm">
         <thead class="bg-slate-50 text-slate-600">
           <tr>
-            <th class="px-3 py-2 font-medium">Local</th>
+            <th class="px-3 py-2 font-medium">Local/Exame</th>
             <th class="px-3 py-2 font-medium">Dia</th>
             <th class="px-3 py-2 font-medium">Início</th>
             <th class="px-3 py-2 font-medium">Fim</th>
+            <th class="px-3 py-2 font-medium">Vagas</th>
             <th class="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
           {
-            availabilityWindows?.length ? (
-              availabilityWindows.map((window) => (
+            rows.length ? (
+              rows.map((row) => (
                 <tr class="border-t border-slate-200">
-                  <td class="px-3 py-2">{(window.clinic_locations as any)?.name}</td>
-                  <td class="px-3 py-2">{weekdayLabels[window.weekday]}</td>
-                  <td class="px-3 py-2">{window.start_time.slice(0, 5)}</td>
-                  <td class="px-3 py-2">{window.end_time.slice(0, 5)}</td>
+                  <td class="px-3 py-2">
+                    {row.label}
+                    {row.kind === "exam" && <span class="ml-1 text-xs text-slate-400">(exame)</span>}
+                  </td>
+                  <td class="px-3 py-2">{weekdayLabels[row.weekday]}</td>
+                  <td class="px-3 py-2">{row.startTime.slice(0, 5)}</td>
+                  <td class="px-3 py-2">{row.endTime.slice(0, 5)}</td>
+                  <td class="px-3 py-2">{row.capacity ?? "—"}</td>
                   <td class="whitespace-nowrap px-3 py-2 text-right">
-                    <form method="POST" action={`/api/admin/configuracoes/availability-windows/${window.id}`}>
+                    <form method="POST" action={row.deleteAction}>
                       <button
                         type="submit"
                         class="js-confirm-delete rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
-                        data-confirm-message={`Remover ${weekdayLabels[window.weekday]} ${window.start_time.slice(0, 5)}–${window.end_time.slice(0, 5)} de ${(window.clinic_locations as any)?.name}? Não tem como desfazer — se remover errado, é só cadastrar de novo com os mesmos horários.`}
+                        data-confirm-message={`Remover ${weekdayLabels[row.weekday]} ${row.startTime.slice(0, 5)}–${row.endTime.slice(0, 5)} de ${row.label}? Não tem como desfazer — se remover errado, é só cadastrar de novo com os mesmos horários.`}
                       >
                         Remover
                       </button>
@@ -91,8 +229,10 @@ const errorMessage = errorParam ? errorMessages[errorParam] ?? errorMessages["1"
               ))
             ) : (
               <tr class="border-t border-slate-200">
-                <td class="px-3 py-4 text-slate-500" colspan="5">
-                  Nenhum intervalo de disponibilidade cadastrado ainda.
+                <td class="px-3 py-4 text-slate-500" colspan="6">
+                  {hasActiveFilter
+                    ? "Nenhum intervalo de disponibilidade pra esse filtro."
+                    : "Nenhum intervalo de disponibilidade cadastrado ainda."}
                 </td>
               </tr>
             )
@@ -102,26 +242,30 @@ const errorMessage = errorParam ? errorMessages[errorParam] ?? errorMessages["1"
     </div>
 
     <Card class="mt-4">
-      <form
-        method="POST"
-        action="/api/admin/configuracoes/availability-windows"
-        class="flex flex-wrap items-end gap-3"
-      >
+      <form id="availability_form" method="POST" class="flex flex-wrap items-end gap-3">
+        <input type="hidden" id="clinic_location_id_hidden" name="clinic_location_id" />
+        <input type="hidden" id="exam_type_id_hidden" name="exam_type_id" />
+
         <div>
-          <label for="clinic_location_id" class="block text-sm font-medium text-slate-700">
-            Local
-          </label>
+          <label for="target" class="block text-sm font-medium text-slate-700">Local/Exame</label>
           <select
-            id="clinic_location_id"
-            name="clinic_location_id"
+            id="target"
             required
             class="mt-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
           >
-            {
-              clinicLocations?.map((location) => (
-                <option value={location.id}>{location.name}</option>
-              ))
-            }
+            <option value="" disabled selected>Selecione…</option>
+            <optgroup label="Local">
+              {clinicLocations?.map((location) => <option value={`location:${location.id}`}>{location.name}</option>)}
+            </optgroup>
+            <optgroup label="Exame">
+              {
+                examTypes?.map((exam) => (
+                  <option value={`exam:${exam.id}`} data-scheduling-mode={exam.scheduling_mode}>
+                    {exam.name}{exam.scheduling_mode === "group" ? " (em grupo)" : ""}
+                  </option>
+                ))
+              }
+            </optgroup>
           </select>
         </div>
         <div>
@@ -155,6 +299,17 @@ const errorMessage = errorParam ? errorMessages[errorParam] ?? errorMessages["1"
             class="mt-1 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
           />
         </div>
+        <div>
+          <label for="capacity" class="block text-sm font-medium text-slate-700">Vagas</label>
+          <input
+            type="number"
+            min="1"
+            id="capacity"
+            name="capacity"
+            disabled
+            class="mt-1 w-24 rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600 disabled:bg-slate-100"
+          />
+        </div>
         <button
           type="submit"
           class="rounded-md bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-800"
@@ -162,8 +317,47 @@ const errorMessage = errorParam ? errorMessages[errorParam] ?? errorMessages["1"
           Adicionar
         </button>
       </form>
+      <p class="mt-2 text-xs text-slate-500">
+        "Vagas" só é preenchível quando o exame escolhido está em modo "Em grupo/turma" (ver
+        Configurações{" › "}
+        <a href="/admin/configuracoes/exames" class="text-sky-700 hover:underline">Exames</a>).
+      </p>
     </Card>
   </section>
 
   <ConfirmDeleteDialog />
 </AdminLayout>
+
+<script>
+  const targetSelect = document.getElementById("target") as HTMLSelectElement;
+  const capacityInput = document.getElementById("capacity") as HTMLInputElement;
+  const locationIdInput = document.getElementById("clinic_location_id_hidden") as HTMLInputElement;
+  const examTypeIdInput = document.getElementById("exam_type_id_hidden") as HTMLInputElement;
+  const form = document.getElementById("availability_form") as HTMLFormElement;
+
+  function updateCapacityState() {
+    const option = targetSelect.selectedOptions[0];
+    const isGroupExam = option?.dataset.schedulingMode === "group";
+    capacityInput.disabled = !isGroupExam;
+    capacityInput.required = isGroupExam;
+    if (!isGroupExam) capacityInput.value = "";
+  }
+
+  targetSelect.addEventListener("change", updateCapacityState);
+  updateCapacityState();
+
+  form.addEventListener("submit", (event) => {
+    const [kind, id] = (targetSelect.value || "").split(":");
+    if (kind === "location") {
+      form.action = "/api/admin/configuracoes/availability-windows";
+      locationIdInput.value = id;
+      examTypeIdInput.value = "";
+    } else if (kind === "exam") {
+      form.action = "/api/admin/configuracoes/exam-type-availability-windows";
+      examTypeIdInput.value = id;
+      locationIdInput.value = "";
+    } else {
+      event.preventDefault();
+    }
+  });
+</script>
