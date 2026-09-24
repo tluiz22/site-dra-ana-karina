@@ -43,15 +43,16 @@ export async function resolveGuardianId(
 
 // Devolve a conversa ao bot: a palavra-chave `#bot` enviada pela secretária
 // pelo app do WhatsApp Business (detectada no echo `smb_message_echoes`)
-// desliga `atendimento_humano` e volta o estado para MENU — ver "Coexistência"
-// e "Máquina de estados" no plano (Fase 3b).
+// desliga `atendimento_humano` e volta o estado para WELCOME (mesmo padrão
+// dos outros pontos de "fim de conversa" — ver "Máquina de estados" no
+// plano, Fase 3b) — o responsável pode não lembrar em que ponto parou.
 export async function returnControlToBot(
   supabase: SupabaseClient,
   guardianPhone: string
 ): Promise<void> {
   const { error } = await supabase
     .from("conversation_state")
-    .update({ atendimento_humano: false, state: "MENU", context: {} })
+    .update({ atendimento_humano: false, state: "WELCOME", context: {} })
     .eq("guardian_phone", guardianPhone);
   if (error) {
     console.error("[whatsapp bot] erro ao devolver conversa ao bot:", error.message);
@@ -74,11 +75,11 @@ export function isPastHumanHandoffDeadline(handoffAt: Date, now: Date = new Date
 // Timeout de inatividade: sem cron dedicado (o único Vercel Cron do projeto
 // roda 1x/dia, para o lembrete de consulta), o reset é lazy, no mesmo padrão
 // do prazo de transbordo acima — só é avaliado quando uma nova mensagem
-// chega. Se a conversa ficou parada num estado intermediário (fora de
-// WELCOME/MENU, que não têm sub-fluxo/contexto a perder) por mais que esse
-// tempo, reinicia do zero em vez de tentar reencaixar a mensagem num
-// contexto que o responsável provavelmente já esqueceu. Valor fácil de
-// ajustar.
+// chega. Se a conversa ficou parada (fora de WELCOME, que já é o estado de
+// repouso) por mais que esse tempo — inclusive em MENU, rede de segurança
+// contra qualquer ponto que ainda volte pra lá em vez de WELCOME — reinicia
+// do zero em vez de tentar reencaixar a mensagem num contexto que o
+// responsável provavelmente já esqueceu. Valor fácil de ajustar.
 export const IDLE_TIMEOUT_MINUTES = 15;
 
 export function isPastIdleTimeout(lastUpdatedAt: Date, now: Date = new Date()): boolean {

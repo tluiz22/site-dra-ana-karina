@@ -111,7 +111,7 @@ export async function startBooking(
     await sendAndLog(supabase, guardianId, "bot_book_no_location", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 
@@ -619,7 +619,19 @@ async function finishBookingWithPatient(
     await sendAndLog(supabase, guardianId, "bot_book_already_scheduled", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    // Em vez de encerrar em MENU (sem reenviar o menu — o usuário via só
+    // essa mensagem e travava até digitar algo), volta direto pra escolha
+    // de criança, com o mesmo tipo/local já selecionados, pra tentar outra
+    // criança sem repetir a modalidade/local (achado em teste real).
+    const cleanContext: BookingContext = {
+      appointment_type: context.appointment_type,
+      clinic_location_id: context.clinic_location_id,
+      location_category: context.location_category,
+      clinic_location_label: context.clinic_location_label,
+      exam_type_id: context.exam_type_id,
+      exam_type_name: context.exam_type_name,
+    };
+    await enterPatientSelect(supabase, guardianPhone, guardianId, cleanContext);
     return;
   }
 
@@ -654,7 +666,7 @@ async function finishBookingWithPatient(
   await sendAndLog(supabase, guardianId, "bot_booking_link", body, () =>
     sendTextMessage({ to: guardianPhone, body })
   );
-  await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+  await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
 }
 
 async function sendBookingLinkError(
@@ -666,7 +678,7 @@ async function sendBookingLinkError(
   await sendAndLog(supabase, guardianId, "bot_book_link_error", body, () =>
     sendTextMessage({ to: guardianPhone, body })
   );
-  await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+  await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
 }
 
 // --- helpers --------------------------------------------------------------

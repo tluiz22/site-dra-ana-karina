@@ -41,7 +41,7 @@ export async function startExam(
     await sendAndLog(supabase, guardianId, "bot_exam_no_types", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 
@@ -100,7 +100,7 @@ export async function handleExamState(
     await sendAndLog(supabase, guardianId, "bot_exam_no_types", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 

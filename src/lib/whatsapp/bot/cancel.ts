@@ -51,7 +51,7 @@ export async function startCancel(
     await sendAndLog(supabase, guardianId, "bot_cancel_no_guardian", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 
@@ -120,7 +120,7 @@ async function handleCancelSelect(
       await sendAndLog(supabase, guardianId, "bot_cancel_no_match", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
-      await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+      await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
       return;
     }
 
@@ -152,7 +152,7 @@ async function handleCancelConfirm(
     await sendAndLog(supabase, guardianId, "bot_cancel_error", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 
@@ -168,7 +168,7 @@ async function handleCancelConfirm(
     await sendAndLog(supabase, guardianId, "bot_cancel_aborted", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 
@@ -207,7 +207,7 @@ async function performCancel(
       await sendAndLog(supabase, guardianId, "bot_cancel_error", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
-      await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+      await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
       return;
     }
   } else {
@@ -227,7 +227,7 @@ async function performCancel(
   await sendAndLog(supabase, guardianId, "bot_cancel_success", body, () =>
     sendTextMessage({ to: guardianPhone, body })
   );
-  await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+  await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
 }
 
 // --- helpers --------------------------------------------------------------
@@ -244,7 +244,7 @@ async function presentCandidates(
     await sendAndLog(supabase, guardianId, "bot_cancel_no_appointments", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 

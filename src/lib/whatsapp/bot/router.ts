@@ -87,14 +87,11 @@ export async function routeIncomingMessage(
   const selection = extractSelection(waMsg);
 
   // Timeout de inatividade (15min, ver `isPastIdleTimeout`): a conversa
-  // estava num sub-fluxo (fora de WELCOME/MENU) e ficou parada tempo demais
-  // — reinicia do zero em vez de tentar reencaixar esta mensagem num
-  // contexto que o responsável provavelmente já esqueceu.
-  if (
-    convo.state !== "WELCOME" &&
-    convo.state !== "MENU" &&
-    isPastIdleTimeout(new Date(convo.updated_at))
-  ) {
+  // ficou parada tempo demais fora de WELCOME (inclusive em MENU — rede de
+  // segurança contra qualquer ponto que ainda pouse lá em vez de WELCOME) —
+  // reinicia do zero em vez de tentar reencaixar esta mensagem num contexto
+  // que o responsável provavelmente já esqueceu.
+  if (convo.state !== "WELCOME" && isPastIdleTimeout(new Date(convo.updated_at))) {
     await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     convo.state = "WELCOME";
     convo.context = {};
@@ -150,10 +147,9 @@ export async function routeIncomingMessage(
       return;
     default:
       // Estado desconhecido/obsoleto (ex.: enum antigo já removido da
-      // máquina de estados) — devolve para o menu principal em vez de
-      // deixar a conversa travada num estado sem handler.
-      await updateConversationState(supabase, guardianPhone, "MENU");
-      await sendMenu(supabase, guardianPhone, guardianId);
+      // máquina de estados) — reinicia do zero (WELCOME) em vez de deixar a
+      // conversa travada num estado sem handler.
+      await handleWelcome(supabase, guardianPhone, guardianId);
   }
 }
 

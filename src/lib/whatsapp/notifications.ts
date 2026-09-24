@@ -10,6 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendTemplateMessage } from "./client";
 import { formatWhen } from "./formatDateTime";
 import { formatCentsBRL } from "../money";
+import { updateConversationState } from "./bot/shared";
 
 interface NotificationInput {
   supabase: SupabaseClient;
@@ -169,6 +170,15 @@ async function sendNotification(
   if (error) {
     console.error("[whatsapp] falha ao registrar whatsapp_messages:", error.message);
   }
+
+  // Essas notificações (confirmação/remarcação/cancelamento/lembrete) não
+  // passam pelo roteador do bot — sem isso, a conversa ficava parada em
+  // qualquer estado que estivesse antes (ex.: MENU de uma interação
+  // anterior), e um "ok" de resposta à notificação caía direto em "não
+  // entendi" em vez de reiniciar do zero. Reseta mesmo se o envio falhou ou
+  // o template ainda não foi aprovado — a ação (marcar/remarcar/cancelar) já
+  // aconteceu de verdade no sistema, independente da entrega da mensagem.
+  await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
 
   return status;
 }

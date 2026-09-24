@@ -51,7 +51,7 @@ export async function startReschedule(
     await sendAndLog(supabase, guardianId, "bot_reschedule_no_guardian", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 
@@ -100,7 +100,7 @@ export async function handleRescheduleState(
       await sendAndLog(supabase, guardianId, "bot_reschedule_no_match", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
-      await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+      await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
       return;
     }
 
@@ -139,7 +139,7 @@ export async function handleRescheduleState(
       await sendAndLog(supabase, guardianId, "bot_reschedule_error", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
-      await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+      await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
       return;
     }
 
@@ -153,7 +153,7 @@ export async function handleRescheduleState(
       await sendAndLog(supabase, guardianId, "bot_reschedule_error", body, () =>
         sendTextMessage({ to: guardianPhone, body })
       );
-      await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+      await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
       return;
     }
 
@@ -186,7 +186,7 @@ async function presentCandidates(
     await sendAndLog(supabase, guardianId, "bot_reschedule_no_appointments", body, () =>
       sendTextMessage({ to: guardianPhone, body })
     );
-    await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+    await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
     return;
   }
 
@@ -282,7 +282,7 @@ async function finishReschedule(
   await sendAndLog(supabase, guardianId, "bot_reschedule_link", body, () =>
     sendTextMessage({ to: guardianPhone, body })
   );
-  await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+  await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
 }
 
 async function sendRescheduleLinkError(
@@ -294,5 +294,5 @@ async function sendRescheduleLinkError(
   await sendAndLog(supabase, guardianId, "bot_reschedule_link_error", body, () =>
     sendTextMessage({ to: guardianPhone, body })
   );
-  await updateConversationState(supabase, guardianPhone, "MENU", { context: {} });
+  await updateConversationState(supabase, guardianPhone, "WELCOME", { context: {} });
 }
