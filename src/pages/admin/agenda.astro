@@ -299,6 +299,16 @@ const sortedEvents = [...events].sort(
     });
 
     if (response.ok) {
+      const result = await response.json().catch(() => ({}));
+      if (result.already_canceled) {
+        acceptBtn.disabled = true;
+        acceptBtn.textContent = "Já estava cancelada";
+        errorMsg.textContent = "Essa consulta já tinha sido cancelada por outro canal — a página vai atualizar.";
+        errorMsg.classList.remove("hidden", "text-red-700");
+        errorMsg.classList.add("text-slate-600");
+        setTimeout(() => window.location.reload(), 1800);
+        return;
+      }
       window.location.reload();
     } else {
       acceptBtn.disabled = false;
