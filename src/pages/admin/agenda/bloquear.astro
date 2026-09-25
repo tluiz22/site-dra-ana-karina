@@ -41,6 +41,16 @@ const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1
 
   <Card class="mt-6 max-w-xl">
     <form method="POST" action="/api/admin/agenda/bloqueios" class="flex flex-col gap-6">
+      <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+        <input
+          type="checkbox"
+          id="full_day"
+          name="full_day"
+          class="h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-600"
+        />
+        Bloquear o dia todo (não precisa preencher hora)
+      </label>
+
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label for="start_date" class="block text-sm font-medium text-slate-700">Início — data *</label>
@@ -53,7 +63,7 @@ const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1
             class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
           />
         </div>
-        <div>
+        <div id="start_time_field">
           <label for="start_time" class="block text-sm font-medium text-slate-700">Início — hora *</label>
           <input
             type="time"
@@ -74,7 +84,7 @@ const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1
             class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
           />
         </div>
-        <div>
+        <div id="end_time_field">
           <label for="end_time" class="block text-sm font-medium text-slate-700">Fim — hora *</label>
           <input
             type="time"
@@ -85,6 +95,10 @@ const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1
           />
         </div>
       </div>
+      <p class="text-xs text-slate-500">
+        Pra bloquear vários dias seguidos (ex.: férias), escolha o dia todo e preencha início e fim com datas
+        diferentes.
+      </p>
 
       <div>
         <label for="motivo" class="block text-sm font-medium text-slate-700">Motivo *</label>
@@ -116,3 +130,22 @@ const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1
     </form>
   </Card>
 </AdminLayout>
+
+<script>
+  const fullDayCheckbox = document.getElementById("full_day") as HTMLInputElement;
+  const startTimeField = document.getElementById("start_time_field") as HTMLDivElement;
+  const endTimeField = document.getElementById("end_time_field") as HTMLDivElement;
+  const startTimeInput = document.getElementById("start_time") as HTMLInputElement;
+  const endTimeInput = document.getElementById("end_time") as HTMLInputElement;
+
+  function applyFullDayState() {
+    const fullDay = fullDayCheckbox.checked;
+    startTimeField.classList.toggle("hidden", fullDay);
+    endTimeField.classList.toggle("hidden", fullDay);
+    startTimeInput.required = !fullDay;
+    endTimeInput.required = !fullDay;
+  }
+
+  fullDayCheckbox.addEventListener("change", applyFullDayState);
+  applyFullDayState();
+</script>
