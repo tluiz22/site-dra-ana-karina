@@ -114,6 +114,20 @@ export async function listEvents(timeMin: Date, timeMax: Date): Promise<Calendar
   return response.data.items ?? [];
 }
 
+// Usado pela tela de editar bloqueio (Fase 13 etapa 3) — busca um evento
+// específico direto pelo id, sem precisar de uma janela de tempo como
+// `listEvents` exige.
+export async function getEvent(eventId: string): Promise<CalendarEvent> {
+  const client = getAuthClient();
+
+  const response = await client.request<CalendarEvent>({
+    url: eventsUrl(`/${encodeURIComponent(eventId)}`),
+    method: "GET",
+  });
+
+  return response.data;
+}
+
 function eventsUrl(path = ""): string {
   const calendarId = import.meta.env.GOOGLE_CALENDAR_ID;
   return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events${path}`;

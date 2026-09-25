@@ -1,0 +1,177 @@
+---
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import Card from "../../../../../components/admin/Card.astro";
+import Icon from "../../../../../components/admin/Icon.astro";
+import { getEvent } from "../../../../../lib/google/calendar";
+
+const { id } = Astro.params;
+
+function todayFortaleza(): string {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function addDaysStr(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function toFortaleza(dateTime: string): Date {
+  return new Date(new Date(dateTime).getTime() - 3 * 60 * 60 * 1000);
+}
+
+const today = todayFortaleza();
+
+const event = id
+  ? await getEvent(id).catch(() => null)
+  : null;
+
+const isAdminBlock = event?.extendedProperties?.private?.admin_block === "true";
+
+if (!event || !isAdminBlock || event.status === "cancelled") {
+  return Astro.redirect("/admin/agenda/bloqueios");
+}
+
+const startLocal = event.start.dateTime ? toFortaleza(event.start.dateTime) : null;
+const endLocal = event.end.dateTime ? toFortaleza(event.end.dateTime) : null;
+
+const startDate = startLocal ? startLocal.toISOString().slice(0, 10) : today;
+const startTime = startLocal ? startLocal.toISOString().slice(11, 16) : "";
+const endTime = endLocal ? endLocal.toISOString().slice(11, 16) : "";
+const isFullDayCurrently = startTime === "00:00" && endTime === "00:00";
+const endDateRaw = endLocal ? endLocal.toISOString().slice(0, 10) : today;
+const endDate = isFullDayCurrently ? addDaysStr(endDateRaw, -1) : endDateRaw;
+const motivo = event.description ?? "";
+
+const errorMessages: Record<string, string> = {
+  invalid_range: "O fim precisa ser depois do início.",
+  "1": "Preencha todos os campos antes de confirmar.",
+};
+const errorParam = Astro.url.searchParams.get("error");
+const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
+---
+
+<AdminLayout title="Editar bloqueio">
+  <a
+    href="/admin/agenda/bloqueios"
+    class="inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:underline"
+  >
+    <Icon name="chevron-left" class="h-4 w-4" />
+    Bloqueios de agenda
+  </a>
+
+  <h1 class="mt-3 text-2xl font-bold text-slate-900">Editar bloqueio</h1>
+
+  {
+    errorMessage && (
+      <p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+    )
+  }
+
+  <Card class="mt-6 max-w-xl">
+    <form method="POST" action={`/api/admin/agenda/bloqueios/${id}/editar`} class="flex flex-col gap-6">
+      <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+        <input
+          type="checkbox"
+          id="full_day"
+          name="full_day"
+          checked={isFullDayCurrently}
+          class="h-4 w-4 rounded border-slate-300 text-sky-700 focus:ring-sky-600"
+        />
+        Bloquear o dia todo (não precisa preencher hora)
+      </label>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label for="start_date" class="block text-sm font-medium text-slate-700">Início — data *</label>
+          <input
+            type="date"
+            id="start_date"
+            name="start_date"
+            required
+            value={startDate}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div id="start_time_field" class={isFullDayCurrently ? "hidden" : ""}>
+          <label for="start_time" class="block text-sm font-medium text-slate-700">Início — hora *</label>
+          <input
+            type="time"
+            id="start_time"
+            name="start_time"
+            required={!isFullDayCurrently}
+            value={startTime}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="end_date" class="block text-sm font-medium text-slate-700">Fim — data *</label>
+          <input
+            type="date"
+            id="end_date"
+            name="end_date"
+            required
+            value={endDate}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div id="end_time_field" class={isFullDayCurrently ? "hidden" : ""}>
+          <label for="end_time" class="block text-sm font-medium text-slate-700">Fim — hora *</label>
+          <input
+            type="time"
+            id="end_time"
+            name="end_time"
+            required={!isFullDayCurrently}
+            value={endTime}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label for="motivo" class="block text-sm font-medium text-slate-700">Motivo *</label>
+        <textarea
+          id="motivo"
+          name="motivo"
+          required
+          rows={3}
+          class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+        >{motivo}</textarea>
+      </div>
+
+      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+        <a
+          href="/admin/agenda/bloqueios"
+          class="w-full rounded-md border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:w-fit"
+        >
+          Cancelar
+        </a>
+        <button
+          type="submit"
+          class="w-full rounded-md bg-sky-700 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-800 sm:w-fit"
+        >
+          Salvar alterações
+        </button>
+      </div>
+    </form>
+  </Card>
+</AdminLayout>
+
+<script>
+  const fullDayCheckbox = document.getElementById("full_day") as HTMLInputElement;
+  const startTimeField = document.getElementById("start_time_field") as HTMLDivElement;
+  const endTimeField = document.getElementById("end_time_field") as HTMLDivElement;
+  const startTimeInput = document.getElementById("start_time") as HTMLInputElement;
+  const endTimeInput = document.getElementById("end_time") as HTMLInputElement;
+
+  function applyFullDayState() {
+    const fullDay = fullDayCheckbox.checked;
+    startTimeField.classList.toggle("hidden", fullDay);
+    endTimeField.classList.toggle("hidden", fullDay);
+    startTimeInput.required = !fullDay;
+    endTimeInput.required = !fullDay;
+  }
+
+  fullDayCheckbox.addEventListener("change", applyFullDayState);
+  applyFullDayState();
+</script>
