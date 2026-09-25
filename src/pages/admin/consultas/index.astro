@@ -15,6 +15,7 @@ import Card from "../../../components/admin/Card.astro";
 import Badge from "../../../components/admin/Badge.astro";
 import type { BadgeVariant } from "../../../components/admin/Badge.astro";
 import Icon from "../../../components/admin/Icon.astro";
+import ConfirmDeleteDialog from "../../../components/admin/ConfirmDeleteDialog.astro";
 import { createClient } from "../../../lib/supabase/server";
 import { buildAppointmentTypeLabel } from "../../../lib/whatsapp/notifications";
 import { formatWhen, TIMEZONE } from "../../../lib/whatsapp/formatDateTime";
@@ -224,14 +225,17 @@ if (tab === "resumo") {
 } else if (tab === "aguardando_remarcacao") {
   // Cancelamentos feitos pela equipe (Fase 12) cujo paciente ainda não tem
   // uma consulta/exame novo marcado — sai da lista sozinho quando remarca,
-  // sem precisar de nenhuma ação manual de "resolver".
+  // sem precisar de nenhuma ação manual de "resolver". `rebooking_dismissed_at`
+  // preenchido (botão "Desistiu") também tira da lista, mesmo sem remarcar.
   const { data: canceledRows } = await supabase
     .from("appointments")
     .select(
-      "id, patient_id, scheduled_at, appointment_type, patients ( full_name, guardians ( full_name, phone ) ), exam_types ( id, name )"
+      "id, patient_id, scheduled_at, canceled_at, appointment_type, patients ( full_name, guardians ( full_name, phone ) ), exam_types ( id, name )"
     )
     .eq("status", "canceled")
     .eq("canceled_via", "admin")
+    .is("rebooking_dismissed_at", null)
+    .order("canceled_at", { ascending: false, nullsFirst: false })
     .order("scheduled_at", { ascending: false });
 
   const patientIds = [...new Set((canceledRows ?? []).map((r) => r.patient_id))];
@@ -248,8 +252,9 @@ if (tab === "resumo") {
   const rebookedPatientIds = new Set((rebookedRows ?? []).map((r) => r.patient_id));
 
   // Um paciente pode ter mais de um cancelamento feito pela equipe (ex.:
-  // duas datas seguidas desmarcadas) — mostra só o mais recente por
-  // paciente, não um card por cancelamento. Consulta/retorno e exame
+  // duas datas seguidas desmarcadas) — mostra só o cancelamento mais
+  // recente por paciente (por `canceled_at`, não pela data que estava
+  // marcada), não um card por cancelamento. Consulta/retorno e exame
   // continuam contados separadamente (jornadas separadas, mesmo critério
   // usado no resto do sistema): um paciente com os dois cancelados aparece
   // uma vez pra cada.
@@ -670,12 +675,23 @@ function confirmadasPageUrl(targetPage: number): string {
                   </>
                 )}
               </p>
-              <a
-                href={row.rebookUrl}
-                class="mt-3 inline-flex items-center justify-center rounded-md bg-sky-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-800"
-              >
-                Remarcar
-              </a>
+              <div class="mt-3 flex gap-2">
+                <a
+                  href={row.rebookUrl}
+                  class="flex-1 inline-flex items-center justify-center rounded-md bg-sky-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-800 sm:flex-none"
+                >
+                  Remarcar
+                </a>
+                <form method="POST" action={`/api/admin/consultas/aguardando-remarcacao/${row.id}/desistiu`} class="flex-1 sm:flex-none">
+                  <button
+                    type="submit"
+                    class="js-confirm-delete w-full rounded-md border border-slate-300 px-4 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                    data-confirm-message={`Marcar que ${row.patientName} desistiu? Sai da lista de aguardando remarcação, sem apagar o histórico.`}
+                  >
+                    Desistiu
+                  </button>
+                </form>
+              </div>
             </Card>
           ))
         ) : (
@@ -686,6 +702,8 @@ function confirmadasPageUrl(targetPage: number): string {
       </div>
     )
   }
+
+  <ConfirmDeleteDialog />
 </AdminLayout>
 
 <script>

@@ -27,7 +27,7 @@ export async function cancelAppointmentsInBulk(
     // só segue se a consulta ainda não estava cancelada.
     const { data: appointment } = await supabase
       .from("appointments")
-      .update({ status: "canceled", canceled_via: "admin" })
+      .update({ status: "canceled", canceled_via: "admin", canceled_at: new Date().toISOString() })
       .eq("id", appointmentId)
       .neq("status", "canceled")
       .select(

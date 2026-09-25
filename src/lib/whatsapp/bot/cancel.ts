@@ -257,7 +257,7 @@ async function performCancel(
 
   const { error } = await supabase
     .from("appointments")
-    .update({ status: "canceled", canceled_via: "whatsapp_bot" })
+    .update({ status: "canceled", canceled_via: "whatsapp_bot", canceled_at: new Date().toISOString() })
     .eq("id", appointment.id);
   if (error) {
     console.error("[whatsapp bot] erro ao marcar consulta como cancelada:", error.message);
