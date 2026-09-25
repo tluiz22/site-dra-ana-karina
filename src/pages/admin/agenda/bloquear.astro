@@ -199,6 +199,12 @@ const today = todayFortaleza();
   const conflictKeepBtn = document.getElementById("conflict_keep_btn") as HTMLButtonElement;
   const conflictDismissBtn = document.getElementById("conflict_dialog_dismiss") as HTMLButtonElement;
 
+  // Ids exatos devolvidos pela checagem de conflito — guardados aqui e
+  // reenviados tal como vieram na hora de cancelar, em vez de o servidor
+  // consultar de novo (mesmo padrão do cancelamento em massa do Resumo do
+  // dia, que sempre opera sobre uma lista de ids explícita).
+  let pendingConflictIds: string[] = [];
+
   function payload(extra: Record<string, unknown> = {}) {
     const fullDay = fullDayCheckbox.checked;
     return {
@@ -235,6 +241,7 @@ const today = todayFortaleza();
       submitBtn.textContent = "Confirmar bloqueio";
       conflictCount.textContent = String(result.count);
       conflictList.innerHTML = "";
+      pendingConflictIds = (result.appointments as { id: string; label: string }[]).map((a) => a.id);
       for (const appointment of result.appointments as { label: string }[]) {
         const li = document.createElement("li");
         li.textContent = appointment.label;
@@ -270,7 +277,10 @@ const today = todayFortaleza();
     button.textContent = busyText;
     conflictError.classList.add("hidden");
 
-    const { ok, result } = await submitBlock({ cancel_conflicts: cancelConflicts });
+    const { ok, result } = await submitBlock({
+      cancel_conflicts: cancelConflicts,
+      conflict_appointment_ids: pendingConflictIds,
+    });
 
     if (ok && result.ok) {
       window.location.href = result.redirectTo;

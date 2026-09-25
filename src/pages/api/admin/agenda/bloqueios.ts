@@ -15,12 +15,16 @@ function json(data: unknown, status = 200) {
 
 // Fase 13 etapa 2: antes de criar o bloqueio, checa se há atendimentos
 // ativos no período. Se houver e `cancel_conflicts` ainda não veio no
-// corpo (primeira chamada, direto do formulário), devolve a lista sem criar
-// nada — a tela pergunta sim/não. Na segunda chamada, `cancel_conflicts` já
-// vem definido: `true` cancela todos antes de criar o bloqueio (mesma
-// rotina do cancelamento em massa da Fase 12, com aviso por WhatsApp + link
-// de remarcação); `false` só cria o bloqueio, mantendo os atendimentos como
-// aviso/registro.
+// corpo (primeira chamada, direto do formulário), devolve a lista (com os
+// ids) sem criar nada — a tela pergunta sim/não. Na segunda chamada,
+// `cancel_conflicts` já vem definido e a tela reenvia os mesmos ids que
+// recebeu em `conflict_appointment_ids` — cancelamos exatamente essa lista,
+// sem consultar de novo (mesmo padrão do cancelamento em massa da Fase 12,
+// que sempre opera sobre uma lista de ids explícita vinda do cliente, nunca
+// re-derivada, evitando qualquer divergência entre o que foi mostrado e o
+// que de fato é cancelado). `true` cancela a lista antes de criar o
+// bloqueio (aviso por WhatsApp + link de remarcação); `false` só cria o
+// bloqueio, mantendo os atendimentos como aviso/registro.
 export const POST: APIRoute = async ({ request, cookies }) => {
   const body = await request.json().catch(() => ({}));
   const startDate = typeof body?.start_date === "string" ? body.start_date : undefined;
@@ -31,6 +35,9 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   const endTime = isFullDay ? "00:00" : typeof body?.end_time === "string" ? body.end_time : undefined;
   const effectiveEndDate = isFullDay && endDate ? addDaysStr(endDate, 1) : endDate;
   const cancelConflicts = body?.cancel_conflicts;
+  const conflictAppointmentIds = Array.isArray(body?.conflict_appointment_ids)
+    ? body.conflict_appointment_ids.filter((id: unknown): id is string => typeof id === "string")
+    : [];
 
   if (!startDate || !startTime || !effectiveEndDate || !endTime || !motivo) {
     return json({ error: "missing_fields" }, 400);
@@ -64,20 +71,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         })),
       });
     }
-  } else if (cancelConflicts === true) {
-    const { data: conflicting } = await supabase
-      .from("appointments")
-      .select("id")
-      .in("status", ["scheduled", "confirmed"])
-      .gte("scheduled_at", start.toISOString())
-      .lt("scheduled_at", end.toISOString());
-
-    if (conflicting?.length) {
-      await cancelAppointmentsInBulk(
-        supabase,
-        conflicting.map((appointment) => appointment.id)
-      );
-    }
+  } else if (cancelConflicts === true && conflictAppointmentIds.length) {
+    await cancelAppointmentsInBulk(supabase, conflictAppointmentIds);
   }
 
   await createBlockEvent({ description: motivo, start: start.toISOString(), end: end.toISOString() });
