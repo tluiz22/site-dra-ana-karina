@@ -241,37 +241,50 @@ if (tab === "resumo") {
     .order("canceled_at", { ascending: false, nullsFirst: false })
     .order("scheduled_at", { ascending: false });
 
+  // Consulta/retorno e exame são jornadas separadas (mesmo critério usado
+  // no resto do sistema) — a chave de agrupamento junta first_visit/
+  // return_visit num "consulta" só, mas mantém cada tipo de exame à parte.
+  function followUpKey(patientId: string, appointmentType: string, examTypeId: string | null | undefined): string {
+    return appointmentType === "exam" ? `${patientId}:exam:${examTypeId}` : `${patientId}:consulta`;
+  }
+
   const patientIds = [...new Set((canceledRows ?? []).map((r) => r.patient_id))];
 
+  // "Já remarcou" precisa comparar pela MESMA jornada (consulta ou aquele
+  // exame específico), não só pelo paciente — achado em teste real: um
+  // paciente com exame agendado (sem relação nenhuma) sumia da lista de uma
+  // consulta cancelada só por ter QUALQUER outro atendimento futuro.
   const { data: rebookedRows } = patientIds.length
     ? await supabase
         .from("appointments")
-        .select("patient_id")
+        .select("patient_id, appointment_type, exam_type_id")
         .in("patient_id", patientIds)
         .in("status", ["scheduled", "confirmed"])
         .gt("scheduled_at", now.toISOString())
-    : { data: [] as { patient_id: string }[] };
+    : { data: [] as { patient_id: string; appointment_type: string; exam_type_id: string | null }[] };
 
-  const rebookedPatientIds = new Set((rebookedRows ?? []).map((r) => r.patient_id));
+  const rebookedKeys = new Set(
+    (rebookedRows ?? []).map((r) => followUpKey(r.patient_id, r.appointment_type, r.exam_type_id))
+  );
 
   // Um paciente pode ter mais de um cancelamento feito pela equipe (ex.:
   // duas datas seguidas desmarcadas) — mostra só o cancelamento mais
   // recente por paciente (por `canceled_at`, não pela data que estava
-  // marcada), não um card por cancelamento. Consulta/retorno e exame
-  // continuam contados separadamente (jornadas separadas, mesmo critério
-  // usado no resto do sistema): um paciente com os dois cancelados aparece
-  // uma vez pra cada.
+  // marcada), não um card por cancelamento.
   const seenKeys = new Set<string>();
   const dedupedCanceledRows = (canceledRows ?? []).filter((r) => {
     const examTypeId = (r.exam_types as unknown as { id: string } | null)?.id;
-    const key = r.appointment_type === "exam" ? `${r.patient_id}:exam:${examTypeId}` : `${r.patient_id}:consulta`;
+    const key = followUpKey(r.patient_id, r.appointment_type, examTypeId);
     if (seenKeys.has(key)) return false;
     seenKeys.add(key);
     return true;
   });
 
   aguardandoRows = dedupedCanceledRows
-    .filter((r) => !rebookedPatientIds.has(r.patient_id))
+    .filter((r) => {
+      const examTypeId = (r.exam_types as unknown as { id: string } | null)?.id;
+      return !rebookedKeys.has(followUpKey(r.patient_id, r.appointment_type, examTypeId));
+    })
     .map(mapAguardandoRow);
 } else {
   page = Math.max(1, Number(Astro.url.searchParams.get("page")) || 1);
