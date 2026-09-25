@@ -223,8 +223,10 @@ if (tab === "resumo") {
 
   cards = (data ?? []).map(mapRow);
 } else if (tab === "aguardando_remarcacao") {
-  // Cancelamentos feitos pela equipe (Fase 12) cujo paciente ainda não tem
-  // uma consulta/exame novo marcado — sai da lista sozinho quando remarca,
+  // Só cancelamentos em massa (Fase 12) ou pelo bloqueio de agenda (Fase 13)
+  // — não um cancelamento individual avulso (Agenda ou Resumo do dia), que
+  // já é uma ação pontual da própria secretária, sem precisar de
+  // acompanhamento à parte. Sai da lista sozinho quando o paciente remarca,
   // sem precisar de nenhuma ação manual de "resolver". `rebooking_dismissed_at`
   // preenchido (botão "Desistiu") também tira da lista, mesmo sem remarcar.
   const { data: canceledRows } = await supabase
@@ -234,6 +236,7 @@ if (tab === "resumo") {
     )
     .eq("status", "canceled")
     .eq("canceled_via", "admin")
+    .eq("mass_canceled", true)
     .is("rebooking_dismissed_at", null)
     .order("canceled_at", { ascending: false, nullsFirst: false })
     .order("scheduled_at", { ascending: false });
