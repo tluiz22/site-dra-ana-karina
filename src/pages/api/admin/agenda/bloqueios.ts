@@ -1,5 +1,7 @@
 import type { APIRoute } from "astro";
+import { createClient } from "../../../../lib/supabase/server";
 import { createBlockEvent } from "../../../../lib/google/calendar";
+import { cancelAppointmentsInBulk } from "../../../../lib/scheduling/cancelAppointmentsInBulk";
 
 function addDaysStr(dateStr: string, delta: number): string {
   const d = new Date(`${dateStr}T12:00:00Z`);
@@ -7,36 +9,78 @@ function addDaysStr(dateStr: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Fase 13 etapa 1: cria um bloqueio simples no Google Calendar, sem checar
-// conflito com atendimentos existentes no período ainda (isso é a etapa 2).
-export const POST: APIRoute = async ({ request, redirect }) => {
-  const formData = await request.formData();
-  const startDate = formData.get("start_date")?.toString();
-  const endDate = formData.get("end_date")?.toString();
-  const motivo = formData.get("motivo")?.toString().trim();
-  // "Dia todo": não pede hora — cobre de 00h da data de início até 00h do
-  // dia seguinte à data de fim (fim exclusivo, cobre o dia de fim inteiro).
-  const isFullDay = formData.get("full_day") != null;
-  const startTime = isFullDay ? "00:00" : formData.get("start_time")?.toString();
-  const endTime = isFullDay ? "00:00" : formData.get("end_time")?.toString();
-  const effectiveEndDate = isFullDay && endDate ? addDaysStr(endDate, 1) : endDate;
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+}
 
-  const back = (error: string) => redirect(`/admin/agenda/bloquear?error=${error}`);
+// Fase 13 etapa 2: antes de criar o bloqueio, checa se há atendimentos
+// ativos no período. Se houver e `cancel_conflicts` ainda não veio no
+// corpo (primeira chamada, direto do formulário), devolve a lista sem criar
+// nada — a tela pergunta sim/não. Na segunda chamada, `cancel_conflicts` já
+// vem definido: `true` cancela todos antes de criar o bloqueio (mesma
+// rotina do cancelamento em massa da Fase 12, com aviso por WhatsApp + link
+// de remarcação); `false` só cria o bloqueio, mantendo os atendimentos como
+// aviso/registro.
+export const POST: APIRoute = async ({ request, cookies }) => {
+  const body = await request.json().catch(() => ({}));
+  const startDate = typeof body?.start_date === "string" ? body.start_date : undefined;
+  const endDate = typeof body?.end_date === "string" ? body.end_date : undefined;
+  const motivo = typeof body?.motivo === "string" ? body.motivo.trim() : "";
+  const isFullDay = body?.full_day === true;
+  const startTime = isFullDay ? "00:00" : typeof body?.start_time === "string" ? body.start_time : undefined;
+  const endTime = isFullDay ? "00:00" : typeof body?.end_time === "string" ? body.end_time : undefined;
+  const effectiveEndDate = isFullDay && endDate ? addDaysStr(endDate, 1) : endDate;
+  const cancelConflicts = body?.cancel_conflicts;
 
   if (!startDate || !startTime || !effectiveEndDate || !endTime || !motivo) {
-    return back("1");
+    return json({ error: "missing_fields" }, 400);
   }
 
-  const startIso = `${startDate}T${startTime}:00-03:00`;
-  const endIso = `${effectiveEndDate}T${endTime}:00-03:00`;
-  const start = new Date(startIso);
-  const end = new Date(endIso);
+  const start = new Date(`${startDate}T${startTime}:00-03:00`);
+  const end = new Date(`${effectiveEndDate}T${endTime}:00-03:00`);
 
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-    return back("invalid_range");
+    return json({ error: "invalid_range" }, 400);
+  }
+
+  const supabase = createClient(request, cookies);
+
+  if (cancelConflicts === undefined) {
+    const { data: conflicting } = await supabase
+      .from("appointments")
+      .select("id, scheduled_at, patients ( full_name )")
+      .in("status", ["scheduled", "confirmed"])
+      .gte("scheduled_at", start.toISOString())
+      .lt("scheduled_at", end.toISOString());
+
+    if (conflicting?.length) {
+      return json({
+        conflict: true,
+        count: conflicting.length,
+        appointments: conflicting.map((appointment) => ({
+          id: appointment.id,
+          label: (appointment.patients as unknown as { full_name: string } | null)?.full_name ?? "Paciente",
+          scheduledAt: appointment.scheduled_at,
+        })),
+      });
+    }
+  } else if (cancelConflicts === true) {
+    const { data: conflicting } = await supabase
+      .from("appointments")
+      .select("id")
+      .in("status", ["scheduled", "confirmed"])
+      .gte("scheduled_at", start.toISOString())
+      .lt("scheduled_at", end.toISOString());
+
+    if (conflicting?.length) {
+      await cancelAppointmentsInBulk(
+        supabase,
+        conflicting.map((appointment) => appointment.id)
+      );
+    }
   }
 
   await createBlockEvent({ description: motivo, start: start.toISOString(), end: end.toISOString() });
 
-  return redirect(`/admin/agenda?date=${startDate}`);
+  return json({ ok: true, redirectTo: `/admin/agenda?date=${startDate}` });
 };
