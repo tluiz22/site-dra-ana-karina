@@ -1,0 +1,118 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import Card from "../../../components/admin/Card.astro";
+import Icon from "../../../components/admin/Icon.astro";
+
+function todayFortaleza(): string {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+const today = todayFortaleza();
+
+const errorMessages: Record<string, string> = {
+  invalid_range: "O fim precisa ser depois do início.",
+  "1": "Preencha todos os campos antes de confirmar.",
+};
+const errorParam = Astro.url.searchParams.get("error");
+const errorMessage = errorParam ? (errorMessages[errorParam] ?? errorMessages["1"]) : null;
+---
+
+<AdminLayout title="Bloquear agenda">
+  <a
+    href={`/admin/agenda?date=${today}`}
+    class="inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:underline"
+  >
+    <Icon name="chevron-left" class="h-4 w-4" />
+    Agenda
+  </a>
+
+  <h1 class="mt-3 text-2xl font-bold text-slate-900">Bloquear agenda</h1>
+  <p class="mt-1 text-sm text-slate-600">
+    Cria um bloqueio de verdade no Google Calendar — aparece também pra quem olha só pelo app do celular. Se já
+    houver atendimentos marcados no período, avisamos depois de confirmar; por enquanto, edite ou remova um bloqueio
+    direto pelo app do Google Calendar.
+  </p>
+
+  {
+    errorMessage && (
+      <p class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+    )
+  }
+
+  <Card class="mt-6 max-w-xl">
+    <form method="POST" action="/api/admin/agenda/bloqueios" class="flex flex-col gap-6">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label for="start_date" class="block text-sm font-medium text-slate-700">Início — data *</label>
+          <input
+            type="date"
+            id="start_date"
+            name="start_date"
+            required
+            min={today}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="start_time" class="block text-sm font-medium text-slate-700">Início — hora *</label>
+          <input
+            type="time"
+            id="start_time"
+            name="start_time"
+            required
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="end_date" class="block text-sm font-medium text-slate-700">Fim — data *</label>
+          <input
+            type="date"
+            id="end_date"
+            name="end_date"
+            required
+            min={today}
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+        <div>
+          <label for="end_time" class="block text-sm font-medium text-slate-700">Fim — hora *</label>
+          <input
+            type="time"
+            id="end_time"
+            name="end_time"
+            required
+            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label for="motivo" class="block text-sm font-medium text-slate-700">Motivo *</label>
+        <textarea
+          id="motivo"
+          name="motivo"
+          required
+          rows={3}
+          placeholder="Ex.: imprevisto da médica, férias, feriado"
+          class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-sky-600 focus:outline-none focus:ring-1 focus:ring-sky-600"
+        ></textarea>
+        <p class="mt-1 text-xs text-slate-500">Aparece na Agenda e no evento criado no Google Calendar.</p>
+      </div>
+
+      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+        <a
+          href={`/admin/agenda?date=${today}`}
+          class="w-full rounded-md border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-600 hover:bg-slate-50 sm:w-fit"
+        >
+          Cancelar
+        </a>
+        <button
+          type="submit"
+          class="w-full rounded-md bg-sky-700 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-800 sm:w-fit"
+        >
+          Confirmar bloqueio
+        </button>
+      </div>
+    </form>
+  </Card>
+</AdminLayout>

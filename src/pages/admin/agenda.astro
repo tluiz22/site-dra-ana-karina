@@ -102,6 +102,12 @@ const sortedEvents = [...events].sort(
         <Icon name="plus" class="h-4 w-4" />
         Marcar exame
       </a>
+      <a
+        href="/admin/agenda/bloquear"
+        class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+      >
+        Bloquear agenda
+      </a>
     </div>
   </div>
 
@@ -149,6 +155,7 @@ const sortedEvents = [...events].sort(
         sortedEvents.map((event) => {
           const groupExamTypeId = event.extendedProperties?.private?.group_exam_type_id;
           const appointmentId = event.extendedProperties?.private?.appointment_id;
+          const isAdminBlock = event.extendedProperties?.private?.admin_block === "true";
           const appointment = appointmentId ? appointmentsById.get(appointmentId) : undefined;
           const isCancelled = event.status === "cancelled";
           const isPast = Boolean(event.start.dateTime) && new Date(event.start.dateTime!).getTime() < Date.now();
@@ -231,6 +238,17 @@ const sortedEvents = [...events].sort(
                       .
                     </p>
                   )}
+                </div>
+              ) : isAdminBlock ? (
+                // Bloqueio criado pelo admin (Fase 13 etapa 1) — diferente do
+                // bloqueio manual feito direto no app do Google Calendar
+                // (esse não tem o marcador `admin_block`, cai no else abaixo).
+                <div class="mt-2 text-sm text-slate-700">
+                  <p class="font-medium text-slate-900">Bloqueio administrativo</p>
+                  {event.description && <p class="mt-1 text-slate-500">{event.description}</p>}
+                  <div class="mt-2">
+                    <Badge variant="neutral">Bloqueio</Badge>
+                  </div>
                 </div>
               ) : (
                 <p class="mt-2 text-sm text-slate-500">

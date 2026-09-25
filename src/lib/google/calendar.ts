@@ -89,7 +89,11 @@ export interface CalendarEvent {
   // 4), compartilhado por vários agendamentos — não tem um único
   // `appointment_id` pra apontar, de propósito (ver "Ver pacientes" nas
   // telas de Agenda).
-  extendedProperties?: { private?: { appointment_id?: string; group_exam_type_id?: string } };
+  // `admin_block`: bloqueio criado pelo admin (Fase 13), pra diferenciar de
+  // um bloqueio manual feito direto no app do Google Calendar.
+  extendedProperties?: {
+    private?: { appointment_id?: string; group_exam_type_id?: string; admin_block?: string };
+  };
 }
 
 export async function listEvents(timeMin: Date, timeMax: Date): Promise<CalendarEvent[]> {
@@ -174,6 +178,35 @@ export async function createGroupSessionEvent({
       start: { dateTime: start, timeZone: "America/Fortaleza" },
       end: { dateTime: end, timeZone: "America/Fortaleza" },
       extendedProperties: { private: { group_exam_type_id: examTypeId } },
+    },
+  });
+
+  return { id: response.data.id };
+}
+
+// Bloqueio de agenda criado pelo admin (Fase 13 etapa 1) — sem
+// `appointment_id`, mas com um marcador próprio (`admin_block`) pra a Agenda
+// distinguir de um bloqueio manual feito direto no app do Google Calendar.
+export async function createBlockEvent({
+  description,
+  start,
+  end,
+}: {
+  description: string;
+  start: string;
+  end: string;
+}): Promise<{ id: string }> {
+  const client = getAuthClient();
+
+  const response = await client.request<{ id: string }>({
+    url: eventsUrl(),
+    method: "POST",
+    data: {
+      summary: "Bloqueio administrativo",
+      description,
+      start: { dateTime: start, timeZone: "America/Fortaleza" },
+      end: { dateTime: end, timeZone: "America/Fortaleza" },
+      extendedProperties: { private: { admin_block: "true" } },
     },
   });
 
