@@ -71,8 +71,26 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         })),
       });
     }
-  } else if (cancelConflicts === true && conflictAppointmentIds.length) {
-    await cancelAppointmentsInBulk(supabase, conflictAppointmentIds);
+  } else if (cancelConflicts === true) {
+    // Uso normal: a tela reenvia os ids exatos da checagem de conflito, sem
+    // reconsultar. Se por algum motivo eles não chegarem (ex.: uma aba
+    // aberta antes de um deploy mais novo), cai de volta pra uma consulta
+    // fresca em vez de simplesmente não cancelar nada — melhor um
+    // recálculo do que silenciosamente ignorar o pedido de cancelar.
+    const idsToCancel = conflictAppointmentIds.length
+      ? conflictAppointmentIds
+      : (
+          await supabase
+            .from("appointments")
+            .select("id")
+            .in("status", ["scheduled", "confirmed"])
+            .gte("scheduled_at", start.toISOString())
+            .lt("scheduled_at", end.toISOString())
+        ).data?.map((appointment) => appointment.id) ?? [];
+
+    if (idsToCancel.length) {
+      await cancelAppointmentsInBulk(supabase, idsToCancel);
+    }
   }
 
   await createBlockEvent({ description: motivo, start: start.toISOString(), end: end.toISOString() });
