@@ -1,0 +1,25 @@
+---
+import SectionHeading from "../SectionHeading.astro";
+import EducationTimeline from "../EducationTimeline.astro";
+import CommitmentChips from "../CommitmentChips.astro";
+import { doctor } from "../../data/doctor";
+---
+
+<section id="sobre" class="section-y" aria-labelledby="sobre-titulo">
+  <div class="container-page grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:gap-18">
+    <div class="min-w-0">
+      <SectionHeading id="sobre-titulo" eyebrow="Sobre a médica" title={`${doctor.roles}.`} />
+      <p class="mt-6 max-w-[60ch] text-ink-secondary">
+        A {doctor.professionalName} tem {doctor.yearsOfExperience} de atuação e atende
+        recém-nascidos, bebês, crianças e adolescentes. Formada pela {doctor.medicalSchool}, fez
+        as residências em Pediatria e em Pneumologia Pediátrica no Hospital Infantil Albert Sabin,
+        em Fortaleza/CE, e tem experiência em ensino médico. O atendimento é pautado por ética,
+        respeito, escuta ativa, atualização constante e condutas baseadas nas principais
+        diretrizes.
+      </p>
+      <CommitmentChips class="mt-8" />
+    </div>
+
+    <EducationTimeline showLink class="min-w-0 self-start" />
+  </div>
+</section>

@@ -1,9 +1,10 @@
 ---
+import { Font } from "astro:assets";
 import SeoHead from "../components/SeoHead.astro";
 import StructuredData from "../components/StructuredData.astro";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
-import WhatsAppButton from "../components/WhatsAppButton.astro";
+import MobileActionBar from "../components/MobileActionBar.astro";
 import "../styles/global.css";
 
 interface Props {
@@ -22,6 +23,9 @@ const { title, description, canonical, ogImage, type, noindex } = Astro.props;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f6f2" />
+    <Font cssVariable="--font-figtree" preload />
+    <Font cssVariable="--font-newsreader" preload />
     <SeoHead
       title={title}
       description={description}
@@ -45,13 +49,19 @@ const { title, description, canonical, ogImage, type, noindex } = Astro.props;
       gtag("config", "G-95LN9KB42N");
     </script>
   </head>
-  <body class="flex min-h-screen flex-col bg-white text-slate-900">
+  <body class="flex min-h-screen flex-col pb-(--bar-height) lg:pb-0">
+    <a
+      href="#conteudo"
+      class="sr-only z-50 rounded-full bg-surface px-5 py-3 font-semibold text-brand focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+    >
+      Pular para o conteúdo
+    </a>
     <Header />
-    <main class="flex-1">
+    <main id="conteudo" tabindex="-1" class="flex-1 focus:outline-none">
       <slot />
     </main>
     <Footer />
-    <WhatsAppButton label="WhatsApp" origin="click_whatsapp_floating" floating={true} />
+    <MobileActionBar />
     <script is:inline>
       document.addEventListener("click", (event) => {
         const target = event.target.closest("[data-analytics-event]");

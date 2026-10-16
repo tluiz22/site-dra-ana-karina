@@ -1,0 +1,63 @@
+---
+import { Image } from "astro:assets";
+import fotoDra from "../assets/foto-dra.png";
+import { doctor } from "../data/doctor";
+
+/**
+ * Cabeçalho das páginas internas — REDESIGN_SPEC §6 (páginas internas) e §9.2.7.
+ * - `portrait`: retrato circular de 120 px ao lado do título (página Sobre)
+ * - `byline`: autoria com retrato de 40 px + nome + registros (artigos e guias)
+ */
+interface Props {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  portrait?: boolean;
+  byline?: boolean;
+  width?: "text" | "prose";
+}
+
+const { eyebrow, title, subtitle, portrait = false, byline = false, width = "text" } =
+  Astro.props;
+---
+
+<header class:list={[width === "prose" ? "container-prose" : "container-text", "pt-12 pb-10 sm:pt-16"]}>
+  <div class:list={[portrait && "flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-8"]}>
+    {
+      portrait && (
+        <Image
+          src={fotoDra}
+          alt=""
+          widths={[120, 240]}
+          sizes="120px"
+          class="size-30 flex-none rounded-full object-cover object-[37%_22%]"
+          loading="eager"
+        />
+      )
+    }
+    <div>
+      {eyebrow && <p class="eyebrow mb-3">{eyebrow}</p>}
+      <h1 class="font-display text-h1 font-normal text-ink">{title}</h1>
+      {subtitle && <p class="mt-4 max-w-[60ch] text-lead text-ink-secondary">{subtitle}</p>}
+      <slot />
+    </div>
+  </div>
+
+  {
+    byline && (
+      <div class="mt-8 flex items-center gap-3 border-t border-line pt-6">
+        <Image
+          src={fotoDra}
+          alt=""
+          widths={[40, 80]}
+          sizes="40px"
+          class="size-10 flex-none rounded-full object-cover object-[37%_22%]"
+        />
+        <p class="text-caption text-ink-muted">
+          <span class="block text-small font-semibold text-ink">{doctor.professionalName}</span>
+          {doctor.crm} · {doctor.rqePneumologia}
+        </p>
+      </div>
+    )
+  }
+</header>

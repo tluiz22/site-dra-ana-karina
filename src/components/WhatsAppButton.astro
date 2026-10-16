@@ -1,37 +1,46 @@
 ---
-import { doctor } from "../data/doctor";
+import Icon from "./Icon.astro";
+import { whatsappHref } from "../data/doctor";
 
+/**
+ * Botão de agendamento pelo WhatsApp — único uso da cor `action` (REDESIGN_SPEC §5.1).
+ * `origin` vira o `data-analytics-event` enviado ao Google Analytics.
+ *
+ * Variantes:
+ * - primary: botão principal (52 px)
+ * - compact: cabeçalho e blocos compactos (44 px)
+ * - on-dark: botão branco sobre o bloco escuro da chamada final
+ * - bar: botão da barra fixa do celular (MobileActionBar)
+ */
 interface Props {
   label: string;
   origin: string;
-  floating?: boolean;
+  variant?: "primary" | "compact" | "on-dark" | "bar";
+  class?: string;
 }
 
-const { label, origin, floating = false } = Astro.props;
+const { label, origin, variant = "primary", class: className } = Astro.props;
 
-const href = `https://wa.me/${doctor.phone}?text=${encodeURIComponent(doctor.whatsappMessage)}`;
+const variants = {
+  primary: "min-h-13 px-5 sm:px-7 text-body bg-action text-on-inverse hover:bg-action-hover",
+  compact: "min-h-11 px-5 text-small bg-action text-on-inverse hover:bg-action-hover",
+  "on-dark": "min-h-14 px-7 text-body bg-surface text-ink hover:bg-subtle",
+  bar: "min-h-13 flex-1 px-4 text-small bg-action text-on-inverse hover:bg-action-hover",
+};
 ---
 
-{floating ? (
-  <a
-    href={href}
-    target="_blank"
-    rel="noopener noreferrer"
-    aria-label={`${label} – abrir WhatsApp`}
-    data-analytics-event={origin}
-    class="fixed bottom-4 right-4 z-50 inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-emerald-700"
-  >
-    {label}
-  </a>
-) : (
-  <a
-    href={href}
-    target="_blank"
-    rel="noopener noreferrer"
-    aria-label={`${label} – abrir WhatsApp`}
-    data-analytics-event={origin}
-    class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
-  >
-    {label}
-  </a>
-)}
+<a
+  href={whatsappHref}
+  target="_blank"
+  rel="noopener noreferrer"
+  aria-label={`${label}, abre em nova aba`}
+  data-analytics-event={origin}
+  class:list={[
+    "inline-flex items-center justify-center gap-2.5 rounded-full text-center leading-tight font-semibold transition-colors duration-150 ease-out",
+    variants[variant],
+    className,
+  ]}
+>
+  <Icon name="chat" size={18} />
+  {label}
+</a>

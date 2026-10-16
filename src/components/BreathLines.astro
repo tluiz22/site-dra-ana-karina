@@ -1,0 +1,28 @@
+---
+/** Grafismo "linha de respiração": duas ondas finas e estáticas (REDESIGN_SPEC §5.5). */
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<svg
+  viewBox="0 0 1440 400"
+  preserveAspectRatio="none"
+  aria-hidden="true"
+  focusable="false"
+  class:list={["pointer-events-none opacity-55", className]}
+>
+  <path
+    d="M0 260 C 200 180, 360 340, 560 250 S 920 150, 1120 240 S 1360 300, 1440 220"
+    fill="none"
+    class="stroke-breath-1"
+    stroke-width="1.5"
+    vector-effect="non-scaling-stroke"></path>
+  <path
+    d="M0 300 C 220 230, 380 370, 600 290 S 940 200, 1140 280 S 1370 330, 1440 270"
+    fill="none"
+    class="stroke-breath-2"
+    stroke-width="1.5"
+    vector-effect="non-scaling-stroke"></path>
+</svg>

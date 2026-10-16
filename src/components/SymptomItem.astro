@@ -1,0 +1,24 @@
+---
+/** Item da lista com linhas "Quando procurar" — substitui o antigo SpecialtyCard. */
+interface Props {
+  title: string;
+  description: string;
+  href?: string;
+  linkLabel?: string;
+}
+
+const { title, description, href, linkLabel } = Astro.props;
+---
+
+<li class="border-t border-line py-5.5">
+  <h3 class="text-h3 font-semibold text-ink">{title}</h3>
+  <p class="mt-1.5 text-small text-ink-muted">{description}</p>
+  {
+    href && linkLabel && (
+      <a href={href} class="link-action mt-2.5 inline-flex min-h-11 items-center text-small">
+        {linkLabel}
+        <span aria-hidden="true">&nbsp;→</span>
+      </a>
+    )
+  }
+</li>

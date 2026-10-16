@@ -1,1 +1,333 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* ==========================================================================
+   Design system — Direção A "Respiro" (REDESIGN_SPEC.md)
+   Nenhuma cor, fonte ou tamanho solto nos componentes: tudo sai daqui.
+   ========================================================================== */
+
+@theme {
+  /* A paleta padrão do Tailwind fica desligada: só os tokens abaixo existem. */
+  --color-*: initial;
+
+  /* Fundos */
+  --color-bg: #f5f6f2;
+  --color-surface: #ffffff;
+  --color-subtle: #e4ece6;
+  --color-inverse: #1d4f57;
+  --color-inverse-strong: #18302f;
+
+  /* Texto */
+  --color-ink: #18302f;
+  --color-ink-secondary: #3e504e;
+  --color-ink-muted: #4f5f5d;
+  --color-on-inverse: #ffffff;
+  --color-on-inverse-muted: #c6d9cf;
+  --color-on-inverse-strong-muted: #c9d8d0;
+
+  /* Marca e ação */
+  --color-brand: #1d4f57;
+  --color-brand-hover: #123a40;
+  --color-action: #1e6b57;
+  --color-action-hover: #17594a;
+
+  /* Bordas */
+  --color-line: #d5ddd7;
+  --color-line-strong: #6f837b;
+  --color-line-inverse: rgb(241 245 242 / 0.22);
+
+  /* Foco */
+  --color-focus: #b8741f;
+  --color-focus-inverse: #e0a458;
+
+  /* Estados (somente avisos de saúde) */
+  --color-warning-bg: #fbf1e2;
+  --color-warning-ink: #6b4310;
+  --color-danger-bg: #f8e4e0;
+  --color-danger-ink: #7a2318;
+  --color-success-bg: #e6f0e8;
+  --color-success-ink: #1f4d2e;
+
+  /* Grafismo "linha de respiração" */
+  --color-breath-1: #b9cbbf;
+  --color-breath-2: #d6e1d9;
+
+  /* Famílias (variáveis geradas pela Fonts API do Astro) */
+  --font-sans: var(--font-figtree);
+  --font-display: var(--font-newsreader);
+
+  /* Escala tipográfica (§2.2) */
+  --text-display: clamp(2.25rem, 1.4rem + 3.6vw, 4rem);
+  --text-display--line-height: 1.06;
+  --text-display--letter-spacing: -0.015em;
+  --text-h1: clamp(2rem, 1.5rem + 2.2vw, 3rem);
+  --text-h1--line-height: 1.1;
+  --text-h1--letter-spacing: -0.01em;
+  --text-h2: clamp(1.875rem, 1.45rem + 1.8vw, 2.75rem);
+  --text-h2--line-height: 1.1;
+  --text-h2--letter-spacing: -0.01em;
+  --text-h3-display: 1.5rem;
+  --text-h3-display--line-height: 1.25;
+  --text-h3: clamp(1.1875rem, 1.15rem + 0.15vw, 1.25rem);
+  --text-h3--line-height: 1.35;
+  --text-lead: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem);
+  --text-lead--line-height: 1.6;
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.6;
+  --text-small: 0.9375rem;
+  --text-small--line-height: 1.55;
+  --text-caption: 0.875rem;
+  --text-caption--line-height: 1.45;
+  --text-eyebrow: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --text-eyebrow--line-height: 1.3;
+  --text-eyebrow--letter-spacing: 0.08em;
+  --text-stat: clamp(1.25rem, 1.2rem + 0.25vw, 1.375rem);
+  --text-stat--line-height: 1.2;
+  --text-step: 2.5rem;
+  --text-step--line-height: 1;
+  --text-brand: 1.3125rem;
+  --text-brand--line-height: 1.2;
+  --text-monogram: 1.1875rem;
+  --text-monogram--line-height: 1;
+
+  /* Raios (§5.5) */
+  --radius-icon: 12px;
+  --radius-notice: 14px;
+  --radius-float: 18px;
+  --radius-card: 20px;
+  --radius-block: 24px;
+  --radius-cta: 32px;
+
+  /* Sombras: apenas o cartão flutuante e a barra fixa do celular */
+  --shadow-float: 0 10px 30px rgb(24 48 47 / 0.1);
+  --shadow-bar: 0 -6px 20px rgb(24 48 47 / 0.06);
+}
+
+/* ---------- Utilitários próprios (§3) ---------- */
+
+@utility container-page {
+  width: 100%;
+  max-width: calc(1200px + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+@utility container-text {
+  width: 100%;
+  max-width: calc(880px + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+@utility container-prose {
+  width: 100%;
+  max-width: calc(68ch + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+@utility section-y {
+  padding-block: var(--space-section);
+}
+
+@utility section-head {
+  margin-bottom: var(--space-section-head);
+}
+
+@utility eyebrow {
+  display: block;
+  font-size: var(--text-eyebrow);
+  line-height: var(--text-eyebrow--line-height);
+  letter-spacing: var(--text-eyebrow--letter-spacing);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-brand);
+}
+
+/* Recorte "folha" da foto principal (§5.4) */
+@utility leaf {
+  border-radius: 24px 24px 24px 90px;
+  @media (width >= 64rem) {
+    border-radius: 28px 28px 28px 140px;
+  }
+}
+
+/* Link de texto (§5.2) */
+@utility link {
+  color: var(--color-brand);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  transition: color 150ms ease-out;
+  &:hover {
+    color: var(--color-brand-hover);
+    text-decoration-thickness: 2px;
+  }
+}
+
+/* Link de ação ("Ler guia →") */
+@utility link-action {
+  color: var(--color-brand);
+  font-weight: 600;
+  text-decoration-line: none;
+  text-underline-offset: 0.2em;
+  transition: color 150ms ease-out;
+  &:hover {
+    color: var(--color-brand-hover);
+    text-decoration-line: underline;
+  }
+}
+
+/* ---------- Base ---------- */
+
+@layer base {
+  :root {
+    --gutter: 1rem;
+    --space-section: clamp(3rem, 2rem + 4vw, 6.5rem);
+    --space-section-head: clamp(1.5rem, 1rem + 2vw, 3rem);
+    --header-height: 4rem;
+    --bar-height: 76px;
+  }
+
+  @media (width >= 40rem) {
+    :root {
+      --gutter: 1.5rem;
+    }
+  }
+
+  @media (width >= 64rem) {
+    :root {
+      --gutter: 2rem;
+      --header-height: 4.5rem;
+    }
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: calc(var(--header-height) + 1rem);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: var(--color-subtle);
+    color: var(--color-ink);
+  }
+
+  /* Foco (§7.3) */
+  :where(a, button, summary, [tabindex]):focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 3px;
+  }
+
+  .on-inverse :focus-visible {
+    outline-color: var(--color-focus-inverse);
+  }
+
+  /* FAQ: esconde o marcador nativo do <summary> */
+  summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+/* ---------- Artigos e guias: prose personalizado (§2.4) ---------- */
+
+.prose {
+  --tw-prose-body: var(--color-ink-secondary);
+  --tw-prose-headings: var(--color-ink);
+  --tw-prose-lead: var(--color-ink-secondary);
+  --tw-prose-links: var(--color-brand);
+  --tw-prose-bold: var(--color-ink);
+  --tw-prose-counters: var(--color-brand);
+  --tw-prose-bullets: var(--color-brand);
+  --tw-prose-hr: var(--color-line);
+  --tw-prose-quotes: var(--color-ink);
+  --tw-prose-quote-borders: var(--color-line);
+  --tw-prose-captions: var(--color-ink-muted);
+  --tw-prose-code: var(--color-ink);
+  --tw-prose-th-borders: var(--color-line);
+  --tw-prose-td-borders: var(--color-line);
+  font-size: 1.125rem;
+  line-height: 1.7;
+  max-width: 68ch;
+}
+
+.prose :where(h2):not(:where(.not-prose, .not-prose *)) {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.75rem, 1.5rem + 1vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+}
+
+.prose :where(h3):not(:where(.not-prose, .not-prose *)) {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1.25rem;
+  line-height: 1.35;
+  margin-top: 2rem;
+}
+
+.prose :where(a):not(:where(.not-prose, .not-prose *)) {
+  font-weight: 500;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.prose :where(a):not(:where(.not-prose, .not-prose *)):hover {
+  color: var(--color-brand-hover);
+  text-decoration-thickness: 2px;
+}
+
+/* Avisos dos guias: o texto herda a cor do aviso, não a do artigo. */
+.prose .callout {
+  --tw-prose-body: currentColor;
+  --tw-prose-bold: currentColor;
+  --tw-prose-bullets: currentColor;
+  --tw-prose-counters: currentColor;
+  --tw-prose-links: currentColor;
+}
+
+.prose .callout :where(p, ul, ol):not(:where(.not-prose, .not-prose *)) {
+  margin-block: 0.5em;
+}
+
+/* Blocos dos guias (InfoCard, StepCard…) ficam fora do prose mas dentro do fluxo:
+   devolve o espaçamento vertical que o prose daria. */
+.prose > .not-prose {
+  margin-block: 1.5rem;
+}
+
+/* ---------- Movimento (§8) ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

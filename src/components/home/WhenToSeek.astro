@@ -1,0 +1,17 @@
+---
+import SectionHeading from "../SectionHeading.astro";
+import SymptomItem from "../SymptomItem.astro";
+import { specialties } from "../../data/specialties";
+---
+
+<section class="section-y bg-surface" aria-labelledby="quando-procurar">
+  <div class="container-page grid gap-10 lg:grid-cols-[1fr_1.7fr] lg:gap-14">
+    <SectionHeading id="quando-procurar" eyebrow="Quando procurar" title="Seu filho tem algum destes sinais?">
+      Sintomas respiratórios que voltam ou demoram a passar merecem uma avaliação especializada.
+    </SectionHeading>
+
+    <ul class="grid grid-cols-[repeat(auto-fit,minmax(16rem,1fr))] gap-x-10">
+      {specialties.map((item) => <SymptomItem {...item} />)}
+    </ul>
+  </div>
+</section>

@@ -1,0 +1,48 @@
+---
+import { getCollection } from "astro:content";
+import SectionHeading from "../SectionHeading.astro";
+import { doctor } from "../../data/doctor";
+
+const guides = (await getCollection("guias", ({ data }) => !data.draft)).sort(
+  (a, b) => a.data.pubDate.valueOf() - b.data.pubDate.valueOf() || a.id.localeCompare(b.id),
+);
+---
+
+<section id="guias" class="on-inverse section-y bg-inverse text-on-inverse" aria-labelledby="guias-titulo">
+  <div class="container-page grid gap-10 lg:grid-cols-[1fr_1.7fr] lg:gap-14">
+    <div>
+      <SectionHeading id="guias-titulo" eyebrow="Guias para pais" title="Para ler com calma, em casa." tone="inverse">
+        Materiais práticos e gratuitos escritos pela {doctor.shortName}, com sinais de alerta e
+        cuidados em casa. Cada um tem versão em PDF para imprimir ou levar à consulta.
+      </SectionHeading>
+      <a
+        href="/guias"
+        class="mt-6 inline-flex min-h-11 items-center font-semibold text-on-inverse underline decoration-1 underline-offset-4 hover:decoration-2"
+      >
+        Ver todos os guias
+      </a>
+    </div>
+
+    <ul class="border-b border-line-inverse">
+      {
+        guides.map((guide) => (
+          <li class="flex flex-col gap-2 border-t border-line-inverse py-5.5 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+            <div>
+              <h3 class="font-display text-h3-display font-medium text-on-inverse">
+                {guide.data.condition}
+              </h3>
+              <p class="mt-1 text-small text-on-inverse-muted">{guide.data.subtitle}</p>
+            </div>
+            <a
+              href={`/guias/${guide.id}`}
+              class="inline-flex min-h-11 flex-none items-center font-semibold text-on-inverse hover:underline hover:underline-offset-4"
+            >
+              Ler guia<span class="sr-only"> sobre {guide.data.condition.toLowerCase()}</span>
+              <span aria-hidden="true">&nbsp;→</span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>

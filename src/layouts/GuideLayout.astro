@@ -1,6 +1,9 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
-import WhatsAppButton from "../components/WhatsAppButton.astro";
+import PageHeader from "../components/PageHeader.astro";
+import Button from "../components/Button.astro";
+import Notice from "../components/Notice.astro";
+import FinalCta from "../components/FinalCta.astro";
 import { doctor } from "../data/doctor";
 
 interface Props {
@@ -14,55 +17,55 @@ interface Props {
 const { title, subtitle, description, pdfFile, canonical } = Astro.props;
 ---
 
-<BaseLayout title={`${title} | Guia para pais`} description={description} canonical={canonical}>
-  <article class="mx-auto max-w-3xl px-4 py-12">
-    <header class="mb-8">
-      <p class="mb-2 text-xs font-medium uppercase tracking-wide text-sky-700">
-        Guia para pais e responsáveis
-      </p>
-      <h1 class="text-3xl font-bold leading-tight text-slate-900">{title}</h1>
-      <p class="mt-2 text-lg text-slate-600">{subtitle}</p>
-      <p class="mt-4 text-sm text-slate-500">
-        {doctor.professionalName} · {doctor.crm} · {doctor.rqePneumologia}
-      </p>
-    </header>
-
-    <div class="mb-10 flex flex-col gap-3 sm:flex-row">
-      <a
-        href={pdfFile}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="inline-flex items-center justify-center rounded-lg border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:border-slate-400"
-      >
-        Baixar guia em PDF
-      </a>
-    </div>
-
-    <div class="prose prose-slate max-w-none space-y-8">
-      <slot />
-    </div>
-
-    <aside
-      class="mt-12 rounded-lg border border-amber-200 bg-amber-50 px-6 py-4 text-sm text-amber-900"
-      role="note"
-      aria-label="Aviso médico"
+<BaseLayout
+  title={`${title} | Guia para pais | ${doctor.professionalName}`}
+  description={description}
+  canonical={canonical}
+>
+  <article>
+    <PageHeader
+      eyebrow="Guia para pais e responsáveis"
+      title={title}
+      subtitle={subtitle}
+      width="prose"
+      byline
     >
-      <strong>Aviso:</strong> Este material tem finalidade educativa e não substitui consulta
-      médica. Traga este guia na próxima consulta para conversar com calma sobre o cuidado do seu
-      filho. Em caso de urgência ou emergência, procure atendimento médico imediatamente.
-    </aside>
+      <div class="mt-7">
+        <Button
+          href={pdfFile}
+          icon="download"
+          size="compact"
+          external
+          data-analytics-event="click_download_guia_pdf"
+        >
+          Baixar guia em PDF
+        </Button>
+      </div>
+    </PageHeader>
 
-    <div class="mt-10 flex justify-center">
-      <WhatsAppButton label="Agendar consulta via WhatsApp" origin="click_whatsapp_guia_footer" />
+    <div class="container-prose">
+      <div class="prose">
+        <slot />
+      </div>
+
+      <Notice variant="educational" class="mt-12">
+        Traga este guia na próxima consulta para conversar com calma sobre o cuidado do seu filho.
+      </Notice>
+
+      <nav aria-label="Navegação dos guias" class="mt-10 border-t border-line pt-6">
+        <a href="/guias" class="link-action inline-flex min-h-11 items-center">
+          <span aria-hidden="true">←&nbsp;</span>Voltar aos guias
+        </a>
+      </nav>
     </div>
-
-    <nav class="mt-10 border-t border-slate-200 pt-6">
-      <a
-        href="/guias"
-        class="text-sm font-medium text-sky-700 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600"
-      >
-        ← Voltar aos Guias
-      </a>
-    </nav>
   </article>
+
+  <div class="mt-10">
+    <FinalCta
+      origin="click_whatsapp_guia_footer"
+      title="Quer conversar sobre o cuidado do seu filho?"
+      text="Agende uma consulta e leve este guia com você."
+      compact
+    />
+  </div>
 </BaseLayout>

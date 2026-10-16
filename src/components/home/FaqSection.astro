@@ -1,0 +1,41 @@
+---
+import { faq } from "../../data/faq";
+---
+
+<section class="section-y bg-surface" aria-labelledby="faq-titulo">
+  <div class="container-text">
+    <h2 id="faq-titulo" class="text-center font-display text-h2 font-normal text-ink">
+      Dúvidas frequentes
+    </h2>
+
+    <div class="mt-(--space-section-head) border-b border-line">
+      {
+        faq.map((item, index) => (
+          <details class="group border-t border-line" open={index === 0}>
+            <summary class="flex min-h-14 cursor-pointer list-none items-center justify-between gap-5 py-5 text-h3 font-semibold text-ink">
+              <span>{item.question}</span>
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                aria-hidden="true"
+                class="flex-none text-brand"
+              >
+                <path d="M5 12h14" />
+                <path
+                  d="M12 5v14"
+                  class="origin-center transition-transform duration-150 ease-out group-open:scale-y-0"
+                />
+              </svg>
+            </summary>
+            <p class="max-w-[68ch] pr-10 pb-6 text-ink-secondary">{item.answer}</p>
+          </details>
+        ))
+      }
+    </div>
+  </div>
+</section>

@@ -4,9 +4,9 @@ interface Props {
 }
 ---
 
-<div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-  <h3 class="font-semibold text-slate-900">{Astro.props.title}</h3>
-  <div class="mt-1 text-sm text-slate-600">
+<div class="rounded-card bg-surface p-5">
+  <h3 class="text-h3 font-semibold text-ink">{Astro.props.title}</h3>
+  <div class="mt-1 text-small text-ink-secondary">
     <slot />
   </div>
 </div>
