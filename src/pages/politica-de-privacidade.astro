@@ -8,16 +8,16 @@ import { doctor } from "../data/doctor";
   description={`Saiba como os dados enviados para ${doctor.professionalName} pelo WhatsApp são usados para contato e agendamento.`}
   canonical={Astro.url.href}
 >
-  <section class="mx-auto max-w-3xl px-4 py-16">
-    <h1 class="text-3xl font-bold text-slate-900">Política de privacidade</h1>
-    <p class="mt-4 text-slate-700">
+  <section class="container-text pt-12 pb-(--space-section) sm:pt-16">
+    <h1 class="font-display text-h1 font-normal text-ink">Política de privacidade</h1>
+    <p class="mt-5 max-w-[60ch] text-lead text-ink-secondary">
       Esta política explica, em linguagem simples, como os dados enviados neste site podem ser
       usados no contato com a equipe da {doctor.professionalName}.
     </p>
 
-    <div class="mt-10 space-y-8 text-slate-700">
+    <div class="mt-12 max-w-[68ch] space-y-10 text-ink-secondary">
       <section>
-        <h2 class="text-xl font-bold text-slate-900">Quais dados podem ser enviados</h2>
+        <h2 class="font-display text-h3-display font-medium text-ink">Quais dados podem ser enviados</h2>
         <p class="mt-2">
           Quando você entra em contato pelo WhatsApp, os dados compartilhados na conversa (como
           nome, telefone e a mensagem enviada) podem ser usados para continuar o atendimento.
@@ -25,7 +25,7 @@ import { doctor } from "../data/doctor";
       </section>
 
       <section>
-        <h2 class="text-xl font-bold text-slate-900">Como esses dados são usados</h2>
+        <h2 class="font-display text-h3-display font-medium text-ink">Como esses dados são usados</h2>
         <p class="mt-2">
           Os dados enviados são usados apenas para responder seu contato, organizar informações
           iniciais e apoiar o agendamento de consultas. O WhatsApp não substitui consulta médica,
@@ -34,7 +34,7 @@ import { doctor } from "../data/doctor";
       </section>
 
       <section>
-        <h2 class="text-xl font-bold text-slate-900">Cookies e estatísticas de uso</h2>
+        <h2 class="font-display text-h3-display font-medium text-ink">Cookies e estatísticas de uso</h2>
         <p class="mt-2">
           Este site utiliza o Google Analytics para entender, de forma agregada e anônima, como as
           páginas são visitadas, com o objetivo de melhorar o conteúdo oferecido. Essa ferramenta
@@ -44,7 +44,7 @@ import { doctor } from "../data/doctor";
       </section>
 
       <section>
-        <h2 class="text-xl font-bold text-slate-900">Compartilhamento e cuidados</h2>
+        <h2 class="font-display text-h3-display font-medium text-ink">Compartilhamento e cuidados</h2>
         <p class="mt-2">
           As informações são tratadas com cuidado e apenas na medida necessária para o contato e o
           agendamento. Nenhuma medida de segurança digital oferece garantia absoluta.
@@ -52,7 +52,7 @@ import { doctor } from "../data/doctor";
       </section>
 
       <section>
-        <h2 class="text-xl font-bold text-slate-900">Atualizações desta política</h2>
+        <h2 class="font-display text-h3-display font-medium text-ink">Atualizações desta política</h2>
         <p class="mt-2">
           Esta política pode ser atualizada a qualquer momento para refletir mudanças neste site ou
           na forma de atendimento.
@@ -60,18 +60,13 @@ import { doctor } from "../data/doctor";
       </section>
 
       <section>
-        <h2 class="text-xl font-bold text-slate-900">Como falar conosco</h2>
+        <h2 class="font-display text-h3-display font-medium text-ink">Como falar conosco</h2>
         <p class="mt-2">
           Se você quiser solicitar correção, atualização ou exclusão de dados enviados por este
           site, entre em contato pelo e-mail
-          <a href={`mailto:${doctor.email}`} class="font-medium text-sky-700 underline hover:text-sky-900">
+          <a href={`mailto:${doctor.email}`} class="link font-medium wrap-anywhere">
             {doctor.email}
-          </a>
-          ou pelo telefone
-          <a href={`tel:+${doctor.phone}`} class="font-medium text-sky-700 underline hover:text-sky-900">
-            {doctor.displayPhone}
-          </a>
-          .
+          </a>.
         </p>
       </section>
     </div>

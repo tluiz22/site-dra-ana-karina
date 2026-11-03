@@ -1,0 +1,28 @@
+---
+/** Eyebrow + h2 + introdução opcional — o cabeçalho padrão de seção (REDESIGN_SPEC §6). */
+interface Props {
+  eyebrow?: string;
+  title: string;
+  id?: string;
+  tone?: "default" | "inverse";
+  align?: "left" | "center";
+  class?: string;
+}
+
+const { eyebrow, title, id, tone = "default", align = "left", class: className } = Astro.props;
+const inverse = tone === "inverse";
+---
+
+<div class:list={[align === "center" && "text-center", className]}>
+  {eyebrow && <p class:list={["eyebrow mb-3.5", inverse && "text-on-inverse-muted"]}>{eyebrow}</p>}
+  <h2 id={id} class:list={["font-display text-h2 font-normal", inverse ? "text-on-inverse" : "text-ink"]}>
+    {title}
+  </h2>
+  {
+    Astro.slots.has("default") && (
+      <p class:list={["mt-5 max-w-[42ch] text-lead", inverse ? "text-on-inverse-muted" : "text-ink-secondary"]}>
+        <slot />
+      </p>
+    )
+  }
+</div>

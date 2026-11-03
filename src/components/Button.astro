@@ -1,0 +1,40 @@
+---
+import Icon, { type IconName } from "./Icon.astro";
+
+/**
+ * Botão secundário (link com aparência de botão) — REDESIGN_SPEC §5.1.
+ * O primário de agendamento é sempre o WhatsAppButton.
+ */
+interface Props {
+  href: string;
+  icon?: IconName;
+  size?: "default" | "compact";
+  external?: boolean;
+  class?: string;
+  [key: `data-${string}`]: string;
+}
+
+const {
+  href,
+  icon,
+  size = "default",
+  external = false,
+  class: className,
+  ...rest
+} = Astro.props;
+---
+
+<a
+  href={href}
+  {...external ? { target: "_blank", rel: "noopener noreferrer" } : {}}
+  class:list={[
+    "inline-flex items-center justify-center gap-2.5 rounded-full border border-line-strong bg-transparent font-semibold text-ink transition-colors duration-150 ease-out hover:border-ink hover:bg-surface",
+    size === "compact" ? "min-h-12 px-6 text-small" : "min-h-13 px-6 text-body",
+    className,
+  ]}
+  {...rest}
+>
+  {icon && <Icon name={icon} size={18} />}
+  <slot />
+  {external && <span class="sr-only">(abre em nova aba)</span>}
+</a>

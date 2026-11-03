@@ -18,7 +18,7 @@ const {
 } = Astro.props;
 
 const resolvedCanonical = canonical ?? Astro.url.href;
-const resolvedOgImage = ogImage ?? new URL("/foto-dra.png", Astro.url).href;
+const resolvedOgImage = new URL(ogImage ?? "/og-default.jpg", Astro.url).href;
 ---
 
 <title>{title}</title>
@@ -34,6 +34,10 @@ const resolvedOgImage = ogImage ?? new URL("/foto-dra.png", Astro.url).href;
 <meta property="og:description" content={description} />
 <meta property="og:url" content={resolvedCanonical} />
 <meta property="og:image" content={resolvedOgImage} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Dra. Ana Karina Fernandes, pediatra e pneumologista pediátrica em Mossoró/RN" />
+<meta property="og:locale" content="pt_BR" />
 
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content={title} />

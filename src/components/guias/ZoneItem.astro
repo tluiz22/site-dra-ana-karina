@@ -6,25 +6,20 @@ interface Props {
 
 const { zone, title } = Astro.props;
 
+// O nome da zona vem escrito no título ("Zona verde — …"): a cor nunca é a única pista.
 const styles = {
-  verde: "border-emerald-200 bg-emerald-50 text-emerald-900",
-  amarela: "border-amber-200 bg-amber-50 text-amber-900",
-  vermelha: "border-red-200 bg-red-50 text-red-900",
-};
-
-const dot = {
-  verde: "bg-emerald-600",
-  amarela: "bg-amber-600",
-  vermelha: "bg-red-600",
+  verde: "bg-success-bg text-success-ink",
+  amarela: "bg-warning-bg text-warning-ink",
+  vermelha: "bg-danger-bg text-danger-ink",
 };
 ---
 
-<div class={`rounded-lg border px-5 py-4 ${styles[zone]}`}>
+<div class={`rounded-notice px-5 py-4 ${styles[zone]}`}>
   <p class="flex items-center gap-2 font-semibold">
-    <span class={`h-2.5 w-2.5 flex-none rounded-full ${dot[zone]}`} aria-hidden="true" />
+    <span class="size-2.5 flex-none rounded-full bg-current" aria-hidden="true"></span>
     {title}
   </p>
-  <div class="mt-1 text-sm">
+  <div class="mt-1 text-small">
     <slot />
   </div>
 </div>

@@ -7,16 +7,18 @@ interface Props {
 const { number, title } = Astro.props;
 ---
 
-<div class="flex gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+<div class="flex gap-4 rounded-card bg-surface p-5">
   <span
-    class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-sky-700 text-sm font-semibold text-white"
+    class="flex size-9 flex-none items-center justify-center rounded-full bg-brand font-display text-body text-on-inverse"
     aria-hidden="true"
   >
     {number}
   </span>
   <div>
-    <h3 class="font-semibold text-slate-900">{title}</h3>
-    <div class="mt-1 text-sm text-slate-600">
+    <h3 class="text-h3 font-semibold text-ink">
+      <span class="sr-only">Passo {number}: </span>{title}
+    </h3>
+    <div class="mt-1 text-small text-ink-secondary">
       <slot />
     </div>
   </div>

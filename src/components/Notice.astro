@@ -1,0 +1,35 @@
+---
+/**
+ * Avisos de saúde — fonte única para o aviso de emergência e o aviso educativo
+ * (REDESIGN_SPEC §5.5 e §9.2.6). O slot do aviso educativo recebe uma frase extra
+ * (ex.: o convite dos guias para levar o material à consulta).
+ */
+interface Props {
+  variant: "emergency" | "educational";
+  class?: string;
+}
+
+const { variant, class: className } = Astro.props;
+---
+
+<aside
+  role="note"
+  aria-label={variant === "emergency" ? "Aviso de emergência" : "Aviso médico"}
+  class:list={["rounded-notice bg-warning-bg px-5 py-4 text-small text-warning-ink", className]}
+>
+  {
+    variant === "emergency" ? (
+      <p>
+        <strong class="font-semibold">Em caso de emergência</strong> (sintomas intensos, falta de
+        ar ou piora rápida), procure atendimento imediato. Este site não realiza atendimento de
+        urgência ou emergência.
+      </p>
+    ) : (
+      <p>
+        <strong class="font-semibold">Conteúdo educativo.</strong> Este material não substitui
+        consulta médica. <slot /> Em caso de urgência ou emergência, procure atendimento médico
+        imediatamente.
+      </p>
+    )
+  }
+</aside>

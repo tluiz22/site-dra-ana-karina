@@ -1,0 +1,74 @@
+---
+import { Image, Picture } from "astro:assets";
+import fotoDra from "../../assets/foto-dra.png";
+import { doctor, credentials } from "../../data/doctor";
+import BreathLines from "../BreathLines.astro";
+---
+
+<section class="relative overflow-hidden" aria-labelledby="hero-title">
+  <BreathLines class="absolute inset-x-0 bottom-10 h-75 w-full" />
+
+  <div
+    class="container-page relative grid gap-10 pt-6 pb-12 sm:pt-10 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-16 lg:pt-18 lg:pb-24"
+  >
+    <div class="min-w-0">
+      <!-- Celular e tablet: retrato + especialidade + registros na mesma linha -->
+      <div class="flex items-center gap-3.5 lg:hidden">
+        <Image
+          src={fotoDra}
+          alt=""
+          widths={[96, 192]}
+          sizes="96px"
+          loading="eager"
+          class="size-24 flex-none rounded-full object-cover object-[37%_22%]"
+        />
+        <p class="text-caption text-ink-secondary">
+          <strong class="block text-small font-semibold text-ink">{doctor.title}</strong>
+          {doctor.crm} · RQE 6271<br />
+          {doctor.location}
+        </p>
+      </div>
+
+      <p class="eyebrow mb-5 hidden lg:block">Pneumologista pediátrica em {doctor.location}</p>
+
+      <h1 id="hero-title" class="mt-7 font-display text-display font-normal text-ink lg:mt-0">
+        Cuidado respiratório para crianças, com tempo para ouvir a sua família.
+      </h1>
+
+      <p class="mt-5 max-w-[34em] text-lead text-ink-secondary lg:mt-6">
+        Asma, chiado no peito, tosse que não passa, bronquiolite e alergias respiratórias.
+        Avaliação detalhada de recém-nascidos a adolescentes, com um plano claro para seguir em
+        casa.
+      </p>
+
+      <ul
+        class="mt-8 grid grid-cols-3 gap-x-4 border-t border-line pt-5 text-caption text-ink-secondary sm:gap-x-8 lg:mt-11 lg:pt-6"
+        aria-label="Credenciais"
+      >
+        {
+          credentials.map((item) => (
+            <li class="flex flex-col">
+              <strong class="font-display text-stat font-medium text-ink">{item.value}</strong>
+              {item.label}
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+
+    <div class="relative min-w-0">
+      <Picture
+        src={fotoDra}
+        alt="Dra. Ana Karina Fernandes"
+        formats={["avif", "webp"]}
+        fallbackFormat="jpg"
+        widths={[480, 720, 960, 1200]}
+        sizes="(min-width: 1024px) 560px, calc(100vw - 2rem)"
+        loading="eager"
+        fetchpriority="high"
+        pictureAttributes={{ class: "block" }}
+        class="leaf block h-75 w-full object-cover object-[38%_30%] sm:h-105 lg:h-140"
+      />
+    </div>
+  </div>
+</section>

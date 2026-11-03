@@ -1,0 +1,46 @@
+---
+import { education } from "../data/doctor";
+
+/** Cartão "Formação" — usado na home e na página Sobre (REDESIGN_SPEC §9.2.1). */
+interface Props {
+  showLink?: boolean;
+  headingLevel?: "h2" | "h3";
+  class?: string;
+}
+
+const { showLink = false, headingLevel = "h3", class: className } = Astro.props;
+const Heading = headingLevel;
+---
+
+<div class:list={["rounded-block bg-surface p-6 sm:p-10", className]}>
+  <Heading class="font-display text-h3-display font-medium text-ink">Formação</Heading>
+  <ol class="mt-2">
+    {
+      education.map((item, index) => {
+        const last = index === education.length - 1;
+        return (
+          <li class:list={["flex gap-4.5 py-4.5", !last && "border-b border-line"]}>
+            <span
+              aria-hidden="true"
+              class:list={[
+                "mt-2 size-2.5 flex-none rounded-full border-2 border-brand",
+                last && "bg-brand",
+              ]}
+            />
+            <span>
+              <strong class="block font-semibold text-ink">{item.title}</strong>
+              <span class="text-small text-ink-muted">{item.place}</span>
+            </span>
+          </li>
+        );
+      })
+    }
+  </ol>
+  {
+    showLink && (
+      <a href="/sobre" class="link-action mt-2 inline-flex min-h-11 items-center text-small">
+        Conheça a trajetória completa<span aria-hidden="true">&nbsp;→</span>
+      </a>
+    )
+  }
+</div>

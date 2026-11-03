@@ -1,0 +1,17 @@
+---
+import { commitments } from "../data/doctor";
+
+/** Selos de abordagem (máx. 3) — REDESIGN_SPEC §5.5. */
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+---
+
+<ul class:list={["flex flex-wrap gap-3", className]} aria-label="Abordagem do atendimento">
+  {
+    commitments.map((item) => (
+      <li class="rounded-full bg-subtle px-4 py-2.5 text-small font-medium text-ink">{item}</li>
+    ))
+  }
+</ul>

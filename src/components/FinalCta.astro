@@ -1,0 +1,38 @@
+---
+import WhatsAppButton from "./WhatsAppButton.astro";
+
+/** Chamada final — bloco escuro dentro do container (REDESIGN_SPEC §6, seção 8). */
+interface Props {
+  title?: string;
+  text?: string;
+  origin: string;
+  compact?: boolean;
+}
+
+const {
+  title = "Sintomas respiratórios que voltam merecem uma avaliação com calma.",
+  text = "Envie uma mensagem e combine o melhor horário para a consulta.",
+  origin,
+  compact = false,
+} = Astro.props;
+---
+
+<section class:list={["container-page", compact ? "pb-12" : "pb-(--space-section)"]} aria-labelledby={`cta-${origin}`}>
+  <div
+    class:list={[
+      "on-inverse flex flex-col gap-8 rounded-cta bg-inverse-strong lg:flex-row lg:items-center lg:justify-between",
+      compact ? "px-6 py-10 sm:px-10" : "px-6 py-12 sm:px-12 lg:px-14 lg:py-18",
+    ]}
+  >
+    <div class="max-w-155">
+      <h2
+        id={`cta-${origin}`}
+        class:list={["font-display font-normal text-on-inverse", compact ? "text-h3-display" : "text-h2"]}
+      >
+        {title}
+      </h2>
+      <p class="mt-4 text-lead text-on-inverse-strong-muted">{text}</p>
+    </div>
+    <WhatsAppButton label="Falar pelo WhatsApp" origin={origin} variant="on-dark" class="self-start lg:self-auto" />
+  </div>
+</section>

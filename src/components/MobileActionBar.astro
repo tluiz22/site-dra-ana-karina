@@ -1,0 +1,18 @@
+---
+import WhatsAppButton from "./WhatsAppButton.astro";
+
+/**
+ * Barra fixa inferior no celular e no tablet (REDESIGN_SPEC §4), no lugar do antigo
+ * botão flutuante. Some a partir de 1024 px, quando o cabeçalho assume o agendamento.
+ * O evento de analytics mantém o nome antigo para não quebrar a série histórica.
+ */
+---
+
+<nav
+  aria-label="Ações rápidas"
+  class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/97 pb-[env(safe-area-inset-bottom)] shadow-bar lg:hidden"
+>
+  <div class="container-page flex h-(--bar-height) items-center gap-2.5">
+    <WhatsAppButton label="Agendar pelo WhatsApp" origin="click_whatsapp_floating" variant="bar" />
+  </div>
+</nav>

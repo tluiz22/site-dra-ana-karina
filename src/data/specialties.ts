@@ -1,43 +1,48 @@
+/**
+ * Sinais e condições avaliados — lista única usada na seção "Quando procurar"
+ * da home (antes havia uma segunda lista, `whenToSeekItems`, que repetia este conteúdo).
+ */
 export const specialties = [
   {
-    title: "Asma infantil",
+    title: "Tosse que dura semanas",
     description:
-      "Avaliação e acompanhamento de crianças com sintomas como cansaço, chiado no peito, tosse e falta de ar.",
-    slug: "asma-infantil",
-    guideSlug: "asma-infantil",
+      "Investigação de tosse prolongada, tosse recorrente ou sintomas respiratórios de repetição.",
+    href: "/guias/tosse-infantil",
+    linkLabel: "Guia sobre tosse infantil",
   },
   {
-    title: "Alergias respiratórias",
+    title: "Chiado no peito que volta",
     description:
-      "Avaliação de sintomas respiratórios associados a alergias, com possibilidade de prick test para aeroalérgenos.",
-    slug: "alergias-respiratorias",
+      "Investigação do chiado no peito que volta com frequência, identificando a causa por trás das crises.",
+    href: "/guias/sibilancia-recorrente",
+    linkLabel: "Guia sobre sibilância recorrente",
+  },
+  {
+    title: "Cansaço ou falta de ar",
+    description:
+      "Avaliação e acompanhamento de crianças com cansaço, chiado no peito, tosse e falta de ar, sintomas que podem estar ligados à asma.",
+    href: "/guias/asma-infantil",
+    linkLabel: "Guia sobre asma infantil",
   },
   {
     title: "Bronquiolite",
     description:
       "Orientações para famílias sobre bronquiolite, sinais de alerta e acompanhamento após quadros respiratórios.",
-    slug: "bronquiolite",
-    guideSlug: "bronquiolite",
+    href: "/guias/bronquiolite",
+    linkLabel: "Guia sobre bronquiolite",
   },
   {
-    title: "Tosse persistente",
+    title: "Alergias respiratórias",
     description:
-      "Investigação de tosse prolongada, tosse recorrente ou sintomas respiratórios de repetição.",
-    slug: "tosse-persistente",
-    guideSlug: "tosse-infantil",
+      "Avaliação de sintomas respiratórios associados a alergias, com possibilidade de prick test para aeroalérgenos.",
+    href: "/blog/prick-test-para-aeroalergenos-entenda-o-exame",
+    linkLabel: "Entenda o prick test",
   },
   {
-    title: "Pneumonia infantil",
+    title: "Pneumonia e gripes frequentes",
     description:
-      "Conteúdo educativo sobre sinais de alarme na pneumonia e quando procurar avaliação médica.",
-    slug: "pneumonia-infantil",
-    guideSlug: "pneumonia-infantil",
-  },
-  {
-    title: "Sibilância recorrente",
-    description:
-      "Investigação do chiado no peito que volta com frequência, identificando a causa por trás das crises.",
-    slug: "sibilancia-recorrente",
-    guideSlug: "sibilancia-recorrente",
+      "Infecções respiratórias que se repetem e sinais de alarme que pedem avaliação médica.",
+    href: "/guias/pneumonia-infantil",
+    linkLabel: "Guia sobre pneumonia infantil",
   },
 ];
