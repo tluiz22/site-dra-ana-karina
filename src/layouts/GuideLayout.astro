@@ -1,7 +1,6 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
 import PageHeader from "../components/PageHeader.astro";
-import Button from "../components/Button.astro";
 import Notice from "../components/Notice.astro";
 import FinalCta from "../components/FinalCta.astro";
 import { doctor } from "../data/doctor";
@@ -10,11 +9,10 @@ interface Props {
   title: string;
   subtitle: string;
   description: string;
-  pdfFile: string;
   canonical: string;
 }
 
-const { title, subtitle, description, pdfFile, canonical } = Astro.props;
+const { title, subtitle, description, canonical } = Astro.props;
 ---
 
 <BaseLayout
@@ -30,17 +28,6 @@ const { title, subtitle, description, pdfFile, canonical } = Astro.props;
       width="prose"
       byline
     >
-      <div class="mt-7">
-        <Button
-          href={pdfFile}
-          icon="download"
-          size="compact"
-          external
-          data-analytics-event="click_download_guia_pdf"
-        >
-          Baixar guia em PDF
-        </Button>
-      </div>
     </PageHeader>
 
     <div class="container-prose">

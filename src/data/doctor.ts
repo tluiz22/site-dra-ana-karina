@@ -8,7 +8,7 @@ export const doctor = {
   crm: "CRM-RN 5751",
   rqePediatria: "RQE Pediatria 1557",
   rqePneumologia: "RQE Pneumologia Pediátrica 6271",
-  yearsOfExperience: "13 anos",
+  since: "Desde 2012",
   medicalSchool: "Universidade Federal de Campina Grande",
   pediatricsResidency: "Hospital Infantil Albert Sabin - Fortaleza/CE",
   pulmonologyResidency: "Hospital Infantil Albert Sabin - Fortaleza/CE",
@@ -17,8 +17,13 @@ export const doctor = {
   targetAudience: "Recém-nascidos, bebês, crianças e adolescentes",
   city: "Mossoró",
   state: "RN",
-  /** Único local exibido no site (sem nome da clínica, endereço ou dia de atendimento). */
+  /** Cidade exibida em cabeçalho, hero e rodapé. */
   location: "Mossoró - RN",
+  /** Locais de atendimento. */
+  locations: [
+    { name: "Instituto André Camurça", address: "Rua Ferreira Itajubá, 301, Santo Antônio, Mossoró - RN" },
+    { name: "Clínica Patrícia Seabra", address: "Avenida Rio Branco, 1258, Centro, Mossoró - RN" },
+  ],
   homeVisits: "Consultas domiciliares conforme demanda",
   paymentModel: "Atendimento particular",
   phone: "5584981880777",
@@ -67,7 +72,7 @@ export const commitments = [
 
 /** Faixa de credenciais da primeira dobra. */
 export const credentials = [
-  { value: doctor.yearsOfExperience, label: "de atuação em pediatria" },
+  { value: doctor.since, label: "atuação em pediatria" },
   { value: "Albert Sabin", label: "residências em Pediatria e Pneumologia" },
   { value: "RQE 6271", label: "Pneumologia Pediátrica" },
 ];

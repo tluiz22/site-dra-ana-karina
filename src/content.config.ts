@@ -22,7 +22,6 @@ const guias = defineCollection({
     condition: z.string(),
     pubDate: z.coerce.date(),
     updatedDate: z.coerce.date().optional(),
-    pdfFile: z.string(),
     draft: z.boolean().default(false),
   }),
 });

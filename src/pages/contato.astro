@@ -31,7 +31,16 @@ import { doctor, instagramHref } from "../data/doctor";
           <dl class="mt-4 grid gap-5">
             <div>
               <dt class="text-caption text-ink-muted">Local</dt>
-              <dd class="mt-0.5 font-medium text-ink">{doctor.location}</dd>
+              <dd class="mt-0.5 font-medium text-ink">
+                <ul class="space-y-3">
+                  {doctor.locations.map((l) => (
+                    <li>
+                      {l.name}
+                      <span class="block font-normal text-ink-secondary">{l.address}</span>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
             </div>
             <div>
               <dt class="text-caption text-ink-muted">Modalidade</dt>

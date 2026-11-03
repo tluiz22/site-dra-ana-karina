@@ -8,7 +8,14 @@ import Notice from "./Notice.astro";
     <div>
       <p class="font-display text-h3-display text-ink">{doctor.professionalName}</p>
       <p class="mt-1.5">{doctor.crm} · {doctor.rqePediatria} · {doctor.rqePneumologia}</p>
-      <p class="mt-4">{doctor.location}</p>
+      <ul class="mt-4 space-y-3">
+        {doctor.locations.map((l) => (
+          <li>
+            <strong class="block font-semibold text-ink">{l.name}</strong>
+            {l.address}
+          </li>
+        ))}
+      </ul>
     </div>
 
     <ul class="flex flex-col gap-1" aria-label="Contato">
